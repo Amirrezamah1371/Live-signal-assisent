@@ -16,34 +16,33 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Find newest ZIP
+      - name: Find target ZIP
         shell: bash
         run: |
-          ZIP_FILE="$(git log --diff-filter=AM --name-only --pretty=format: -- '*.zip' | awk 'NF' | head -n 1)"
+          echo "ZIP files available in repository:"
+          find . -maxdepth 1 -type f -iname "*.zip" -print
+
+          ZIP_FILE="$(find . -maxdepth 1 -type f -iname "LiveSignalAssistant-APK-*.zip" -print0 | xargs -0 -r ls -1t | head -n 1)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No ZIP file found in Git history"
+            echo "ERROR: LiveSignalAssistant APK ZIP not found"
             exit 1
           fi
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP exists in history but not in current checkout: $ZIP_FILE"
-            exit 1
-          fi
+          echo "Selected ZIP:"
+          printf '%s\n' "$ZIP_FILE"
 
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
-          echo "Selected ZIP: $ZIP_FILE"
-          ls -lh "$ZIP_FILE"
 
       - name: Extract project
         shell: bash
         run: |
           rm -rf extracted
           mkdir -p extracted
+
           unzip -q "$ZIP_FILE" -d extracted
+
           echo "ZIP extracted successfully"
 
       - name: Find Android project
@@ -53,11 +52,13 @@ jobs:
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found inside ZIP"
+            echo "Files found inside extracted ZIP:"
             find extracted -maxdepth 4 -type f | sort | head -200
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found at: $PROJECT_DIR"
 
