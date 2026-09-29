@@ -1,720 +1,99 @@
-Modify the existing LiveSignalAssistant_BALANCED_v2 Android project.
-
-DO NOT rebuild the application from scratch.
-DO NOT remove or break any currently working feature.
-Preserve the existing overlay, pair detection, timer, trade detection, trade locking, and screen/chart monitoring.
-
-The current version is much better, but it has four important problems:
-
-1. It stays in WAIT far too long and misses valid opportunities.
-2. Sometimes it becomes biased toward only UP or only DOWN.
-3. Some signals are generated too late, after the useful entry point has already passed.
-4. We need automatic WIN/LOSS tracking for trades that the user actually opens.
-
-The purpose of this update is NOT to force trades.
-The purpose is to continuously analyze the visible chart, detect valid opportunities faster, evaluate UP and DOWN independently, select an appropriate 1m/2m/3m expiry, and avoid unnecessary WAIT states.
-
-There is NO guaranteed winning signal.
-Never generate a signal merely because time has passed.
-
-==================================================
-1. CONTINUOUS REAL-TIME ANALYSIS
-==================================================
-
-Analyze the visible chart continuously.
-
-Run a new analysis approximately every 500–750 ms.
-
-Maintain a rolling history of approximately the most recent 20–40 detected chart/price observations.
-
-Do NOT make a trading decision from one isolated screenshot or one single point.
-
-Continuously calculate:
-
-- immediate price direction
-- short-term momentum
-- medium-term momentum
-- acceleration
-- deceleration
-- recent swing highs
-- recent swing lows
-- higher highs
-- higher lows
-- lower highs
-- lower lows
-- local support
-- local resistance
-- breakout attempts
-- breakdown attempts
-- support rejection
-- resistance rejection
-- pullbacks
-- retests
-- reversal structure
-- continuation structure
-- current volatility
-- abnormal spikes
-- distance from recent mean
-- distance from recent swing extremes
-
-The analysis must continuously update as the visible chart changes.
-
-==================================================
-2. INDEPENDENT UP AND DOWN ENGINES
-==================================================
-
-This is CRITICAL.
-
-On EVERY analysis cycle calculate independently:
-
-upScore = 0..100
-downScore = 0..100
-
-UP and DOWN must NEVER depend on each other.
-
-DO NOT use:
-
-if bullish -> UP
-else -> DOWN
-
-DO NOT use previousDirection to determine the next direction.
-
-DO NOT alternate UP and DOWN artificially.
-
-DO NOT suppress UP because previous signals were UP.
-
-DO NOT suppress DOWN because previous signals were DOWN.
-
-Every cycle must evaluate BOTH directions from zero using the current chart data.
-
-The market/chart must determine the direction.
-
-==================================================
-3. UP SCORE
-==================================================
-
-Increase upScore when bullish evidence exists.
-
-Bullish evidence can include:
-
-- higher lows
-- higher highs
-- positive short momentum
-- positive medium momentum
-- bullish acceleration
-- rejection upward from support
-- bullish reversal after a decline
-- breakout above recent resistance
-- breakout followed by successful retest
-- pullback followed by upward continuation
-- recovery after a temporary downward extension
-- failed bearish breakdown
-- price reclaiming a recently lost level
-
-Multiple moderate confirmations should be capable of producing a valid UP signal.
-
-DO NOT require every bullish condition simultaneously.
-
-==================================================
-4. DOWN SCORE
-==================================================
-
-Increase downScore when bearish evidence exists.
-
-Bearish evidence can include:
-
-- lower highs
-- lower lows
-- negative short momentum
-- negative medium momentum
-- bearish acceleration
-- rejection downward from resistance
-- bearish reversal after a rise
-- breakdown below recent support
-- breakdown followed by failed retest
-- pullback followed by downward continuation
-- rejection after temporary upward extension
-- failed bullish breakout
-- price losing a recently defended level
-
-Multiple moderate confirmations should be capable of producing a valid DOWN signal.
-
-DO NOT require every bearish condition simultaneously.
-
-==================================================
-5. WEIGHTED SCORING
-==================================================
-
-Replace excessive all-or-nothing confirmation logic with weighted scoring.
-
-Suggested starting weights:
-
-Momentum confirmation: +18
-Market structure confirmation: +16
-Support/resistance reaction: +16
-Breakout or breakdown + retest: +18
-Reversal confirmation: +16
-Continuation confirmation: +12
-Acceleration confirmation: +10
-Suitable volatility: +8
-
-Do not require all components.
-
-The scoring must be symmetrical for UP and DOWN.
-
-Suggested normal signal threshold:
-
-62
-
-Strong signal threshold:
-
-72
-
-Generate WAIT when:
-
-max(upScore, downScore) < 62
-
-OR
-
-abs(upScore - downScore) < 8
-
-OR
-
-the market is genuinely noisy, unstable, or ambiguous.
-
-Do NOT output WAIT merely because one confirmation is missing.
-
-==================================================
-6. ADAPTIVE THRESHOLD
-==================================================
-
-Do not use an excessively rigid threshold.
-
-Normal market:
-
-approximately 62
-
-Clean structure with several independent confirmations:
-
-approximately 60–62 may be accepted.
-
-Noisy/choppy market:
-
-increase threshold toward approximately 68–72.
-
-IMPORTANT:
-
-Never reduce the threshold merely because the application has not produced a signal recently.
-
-No-signal duration must NEVER force a trade.
-
-The application should actively search for opportunities continuously, but it must not manufacture them.
-
-==================================================
-7. DO NOT MISS VALID OPPORTUNITIES
-==================================================
-
-The current version is too conservative.
-
-A valid setup does NOT need every possible confirmation.
-
-If several independent pieces of evidence agree strongly enough, allow the signal.
-
-For example:
-
-good structure
-+
-good momentum
-+
-support/resistance reaction
-
-may be sufficient even if there is no breakout.
-
-Likewise:
-
-breakout
-+
-momentum
-+
-successful retest
-
-may be sufficient without requiring a reversal pattern.
-
-Evaluate combinations rather than requiring one fixed pattern.
-
-==================================================
-8. ENTRY TIMING
-==================================================
-
-Entry timing is extremely important.
-
-Do not generate a signal after most of the expected move has already happened.
-
-Reject obviously late entries where price is excessively extended from recent structure.
-
-Prefer entries around:
-
-reversal + confirmation
-breakout + confirmation
-breakdown + confirmation
-retest + continuation
-pullback + continuation
-support rejection
-resistance rejection
-failed breakout
-failed breakdown
-
-Once a valid entry appears, publish it promptly.
-
-Do NOT wait for so many additional confirmations that the useful entry point disappears.
-
-==================================================
-9. SIGNAL STABILITY
-==================================================
-
-To reduce one-frame noise:
-
-A candidate UP or DOWN setup should remain valid for approximately 2 consecutive analysis cycles before publishing.
-
-Do NOT require long confirmation windows.
-
-The purpose is only to reject momentary visual noise.
-
-==================================================
-10. EXPIRY ENGINE
-==================================================
-
-Evaluate all six possibilities independently:
-
-UP 1m
-UP 2m
-UP 3m
-
-DOWN 1m
-DOWN 2m
-DOWN 3m
-
-Each candidate should receive its own suitability score.
-
-Then select the highest valid combination of:
-
-direction + expiry.
-
-General guidance:
-
-Fast immediate momentum or confirmed short reversal:
-consider 1m
-
-Normal continuation, breakout, breakdown or retest:
-consider 2m
-
-Slower structure or larger swing:
-consider 3m
-
-Do NOT always choose the same expiry.
-
-Do NOT select expiry randomly.
-
-Expiry must be based on the speed and structure of the detected move.
-
-==================================================
-11. PREVENT LATE SIGNALS
-==================================================
-
-Before publishing a signal, estimate whether the move has already become overextended.
-
-If a large percentage of the expected short-term movement appears to have already occurred:
-
-WAIT for a pullback/retest/new setup instead of chasing the move.
-
-A signal appearing at the very end of an already completed movement should be rejected.
-
-==================================================
-12. TRADE DETECTION AND LOCKING
-==================================================
-
-Displaying UP or DOWN must NOT immediately lock the engine.
-
-After displaying a signal:
-
-continue monitoring the Pocket Option screen.
-
-If the user does NOT open the trade:
-
-DO NOT lock.
-
-Continue analyzing.
-
-If the setup becomes invalid before entry:
-
-cancel the displayed opportunity,
-return to WAIT,
-and search for another entry.
-
-ONLY lock after the application detects that the user actually opened a trade.
-
-When a real trade is detected:
-
-LOCK the current trade.
-
-Store:
-
-direction
-expiry
-entry time
-entry price if detectable
-UP score
-DOWN score
-
-During the active trade display:
-
-LOCKED • UP • 1m
-
-or
-
-LOCKED • DOWN • 2m
-
-etc.
-
-Do not generate another signal while the detected trade is active.
-
-After the trade expires:
-
-unlock automatically
-and immediately resume analysis.
-
-==================================================
-13. AUTOMATIC TRADE RESULT TRACKING
-==================================================
-
-Track only trades that the application actually detected as opened by the user.
-
-A displayed signal that the user ignored must NOT count as a trade.
-
-After an opened trade reaches expiry, determine:
-
-WIN
-LOSS
-DRAW
-
-using the detected entry and expiry result when technically available.
-
-Maintain session statistics:
-
-Total Trades
-Wins
-Losses
-Draws
-Win Rate
-
-For example:
-
-Trades: 8
-W: 6
-L: 2
-D: 0
-Win Rate: 75%
-
-Display compact statistics in the overlay.
-
-Example while analyzing:
-
-WAIT • ANALYZING
-W 6 | L 2 | 75%
-
-Example while showing a signal:
-
-↑ UP • 2m
-UP 71 | DOWN 34
-W 6 | L 2 | 75%
-
-Example during an active trade:
-
-LOCKED • UP • 2m
-W 6 | L 2 | 75%
-
-After expiry:
-
-1. determine result
-2. update WIN/LOSS/DRAW
-3. update win rate
-4. unlock
-5. immediately resume analysis
-
-If the application cannot reliably determine the trade result from the visible screen, DO NOT guess the result.
-
-==================================================
-14. TRADE HISTORY / DEBUG LOG
-==================================================
-
-Record every detected completed trade.
-
-Example:
-
-Trade #8
-Direction: DOWN
-Expiry: 2m
-Entry Price: 1.06087
-Exit Price: 1.06071
-UP Score: 31
-DOWN Score: 74
-Result: WIN
-
-Also log the signal components:
-
-Momentum score
-Structure score
-Support/Resistance score
-Reversal score
-Continuation score
-Breakout/Breakdown score
-Volatility state
-
-This information is required for later tuning.
-
-Previous WIN/LOSS results are diagnostic data only.
-
-NEVER make the next trade UP or DOWN simply because previous trades won or lost.
-
-==================================================
-15. LIVE DEBUG INFORMATION
-==================================================
-
-Internally log every important decision.
-
-Example:
-
-UP=69
-DOWN=35
-Momentum=17
-Structure=15
-SupportResistance=14
-Reversal=12
-Breakout=6
-Volatility=NORMAL
-Decision=UP
-Expiry=2m
-
-For WAIT:
-
-UP=51
-DOWN=47
-Decision=WAIT
-Reason=SCORES_TOO_CLOSE
-
-or:
-
-UP=58
-DOWN=31
-Decision=WAIT
-Reason=THRESHOLD_NOT_REACHED
-
-This is important because future threshold adjustments must be based on actual measured behavior rather than guessing.
-
-==================================================
-16. FIX THE UP-ONLY / DOWN-ONLY BUG
-==================================================
-
-Audit the complete signal engine specifically for the bug where the application sometimes generates only UP or only DOWN.
-
-Search for:
-
-- stale previousDirection state
-- shared state between bullish and bearish engines
-- incorrect positive/negative signs
-- inverted screen Y-axis calculations
-- asymmetric thresholds
-- asymmetric normalization
-- else-if branches preventing both directions from being evaluated
-- cached direction
-- incorrect comparison operators
-- bullish logic accidentally reused for bearish logic
-- bearish logic accidentally reused for bullish logic
-
-IMPORTANT:
-
-On Android screen coordinates, Y normally increases downward.
-
-Make absolutely sure screen-coordinate movement is correctly converted into chart price direction.
-
-An upward visual price movement must not accidentally be interpreted as bearish because of screen Y coordinates.
-
-==================================================
-17. DIRECTIONAL SYMMETRY TESTS
-==================================================
-
-Add synthetic tests.
-
-Test A:
-clearly rising sequence
-Expected:
-UP score > DOWN score
-
-Test B:
-clearly falling sequence
-Expected:
-DOWN score > UP score
-
-Test C:
-downtrend followed by confirmed bullish reversal
-Expected:
-UP becomes possible
-
-Test D:
-uptrend followed by confirmed bearish reversal
-Expected:
-DOWN becomes possible
-
-Test E:
-sideways noisy sequence
-Expected:
-WAIT
-
-Test F:
-bullish breakout + retest
-Expected:
-UP becomes possible
-
-Test G:
-bearish breakdown + retest
-Expected:
-DOWN becomes possible
-
-The engine must pass all tests before building the final project.
-
-==================================================
-18. OVERLAY
-==================================================
-
-Keep the existing floating overlay.
-
-Possible states:
-
-WAIT • ANALYZING
-
-↑ UP • 1m
-↑ UP • 2m
-↑ UP • 3m
-
-↓ DOWN • 1m
-↓ DOWN • 2m
-↓ DOWN • 3m
-
-LOCKED • UP • 1m
-LOCKED • UP • 2m
-LOCKED • UP • 3m
-
-LOCKED • DOWN • 1m
-LOCKED • DOWN • 2m
-LOCKED • DOWN • 3m
-
-Show compact score information when possible:
-
-UP 68 | DOWN 32
-
-Also show session performance:
-
-W 6 | L 2 | 75%
-
-Do not make the overlay unnecessarily large.
-
-==================================================
-19. PERFORMANCE
-==================================================
-
-The analysis loop must remain lightweight.
-
-Do not freeze the UI.
-
-Do not create unnecessary bitmap allocations every cycle.
-
-Reuse buffers where possible.
-
-Perform expensive processing away from the main UI thread.
-
-Prevent memory leaks.
-
-Prevent multiple analysis loops from accidentally running simultaneously.
-
-==================================================
-20. SAFETY AGAINST DUPLICATE SIGNALS
-==================================================
-
-Do not repeatedly publish the identical signal every analysis cycle.
-
-Maintain a candidate state.
-
-Only publish when:
-
-a new valid setup appears
-
-or
-
-the previous setup materially changes.
-
-If the user does not enter and the setup remains valid, keep displaying it without creating multiple fake trade records.
-
-==================================================
-21. FINAL BEHAVIOR
-==================================================
-
-The desired behavior is:
-
-CONTINUOUS ANALYSIS
-→
-DETECT STRUCTURE
-→
-CALCULATE UP SCORE
-+
-CALCULATE DOWN SCORE
-→
-COMPARE VALID SETUPS
-→
-SELECT DIRECTION
-+
-SELECT 1m / 2m / 3m
-→
-SHOW SIGNAL PROMPTLY
-→
-IF USER DOES NOT TRADE:
-KEEP ANALYZING
-→
-IF SETUP DISAPPEARS:
-RETURN TO WAIT
-→
-IF USER OPENS TRADE:
-LOCK
-→
-WAIT FOR EXPIRY
-→
-DETERMINE WIN/LOSS/DRAW IF RELIABLY POSSIBLE
-→
-UPDATE STATISTICS
-→
-UNLOCK
-→
-RESUME ANALYSIS
-
-FINAL OBJECTIVE:
-
-FAST DETECTION
-+
-BALANCED UP/DOWN ANALYSIS
-+
-FEWER MISSED VALID SETUPS
-+
-LESS UNNECESSARY WAIT
-+
-BETTER ENTRY TIMING
-+
-ADAPTIVE 1m/2m/3m EXPIRY
-+
-REAL TRADE LOCKING
-+
-WIN/LOSS TRACKING
-+
-NO FORCED SIGNALS.
-
-Do NOT claim that any signal is guaranteed to win.
-
-Modify the existing BALANCED_v2 project, test it, build the updated Android project, and return the complete updated project ZIP ready for the existing GitHub Actions build process.
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "LiveSignalAssistant_BALANCED_FAST_v3.zip"
+      - ".github/workflows/build-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify project ZIP
+        shell: bash
+        run: |
+          if [ ! -f "LiveSignalAssistant_BALANCED_FAST_v3.zip" ]; then
+            echo "ERROR: LiveSignalAssistant_BALANCED_FAST_v3.zip not found"
+            exit 1
+          fi
+          echo "ZIP found successfully"
+
+      - name: Extract project
+        shell: bash
+        run: |
+          rm -rf extracted
+          mkdir extracted
+          unzip -q "LiveSignalAssistant_BALANCED_FAST_v3.zip" -d extracted
+          echo "ZIP extracted successfully"
+          find extracted -maxdepth 4 -type f | head -100
+
+      - name: Find Android project
+        shell: bash
+        run: |
+          SETTINGS=$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -1)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Android project not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Make Gradle wrapper executable
+        shell: bash
+        run: |
+          if [ -f "$PROJECT_DIR/gradlew" ]; then
+            chmod +x "$PROJECT_DIR/gradlew"
+          fi
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Locate APK
+        shell: bash
+        run: |
+          APK=$(find "$PROJECT_DIR" -type f -name "*.apk" | head -1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
+            exit 1
+          fi
+
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          echo "APK created: $APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-APK
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
