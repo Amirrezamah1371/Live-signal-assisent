@@ -1,56 +1,304 @@
-name: Extract Android APK
+Modify the CURRENT working version of LiveSignalAssistant only.
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "*.zip"
-      - ".github/workflows/build-apk.yml"
+THIS IS A VERY SMALL AND TARGETED TUNING UPDATE.
 
-jobs:
-  extract-apk:
-    runs-on: ubuntu-latest
+IMPORTANT:
+The current version is working well and MUST NOT be redesigned.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+DO NOT rebuild the application from scratch.
+DO NOT replace the current signal engine.
+DO NOT rewrite working logic unnecessarily.
+DO NOT change unrelated features.
 
-      - name: Find target ZIP
-        shell: bash
-        run: |
-          ZIP_FILE="$(find . -maxdepth 1 -type f -iname "LiveSignalAssistant-APK-*.zip" -print0 | xargs -0 -r ls -1t | head -n 1)"
+PRESERVE ALL CURRENT WORKING BEHAVIOR.
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found"
-            exit 1
-          fi
+CURRENT DEMO OBSERVATION:
 
-          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
-          echo "Selected ZIP: $ZIP_FILE"
+The latest version has significantly improved.
 
-      - name: Extract APK
-        shell: bash
-        run: |
-          rm -rf extracted
-          mkdir -p extracted
+In the latest short Demo test:
+- Approximately 4 actionable signals were generated in a little over 30 minutes.
+- 3 finished as WIN.
+- 1 finished as LOSS.
 
-          unzip -q "$ZIP_FILE" -d extracted
+This is only a small sample and must NOT be treated as a proven win rate.
 
-          APK_FILE="$(find extracted -type f -name "*.apk" | head -n 1)"
+However, the qualitative behavior of the current engine is clearly improved:
 
-          if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK not found inside ZIP"
-            exit 1
-          fi
+- Signal direction appears substantially better.
+- Entry timing appears better.
+- WAIT is meaningful.
+- The engine is no longer producing excessive random signals.
+- The current 5-second signal hold behavior is useful.
+- Signal invalidation behavior should remain.
+- Timeframe/expiry-aware analysis should remain.
+- The current engine is finding high-quality setups.
 
-          echo "APK_FILE=$APK_FILE" >> "$GITHUB_ENV"
-          echo "APK found: $APK_FILE"
+THE MAIN REMAINING PROBLEM:
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-APK
-          path: ${{ env.APK_FILE }}
-          if-no-files-found: error
+The engine is now TOO CONSERVATIVE.
+
+It appears to reject some potentially valid opportunities because it is waiting for near-perfect confirmation.
+
+There are situations where:
+
+- direction is sufficiently clear,
+- momentum supports the direction,
+- timeframe/expiry alignment is acceptable,
+- entry timing is still actionable,
+- reversal risk is acceptable,
+
+but the engine remains in WAIT because one or more secondary confirmation conditions are not perfect.
+
+The purpose of this update is ONLY to reduce this unnecessary opportunity loss.
+
+==================================================
+1. PRESERVE THE CURRENT CORE ENGINE
+==================================================
+
+Keep the CURRENT directional analysis exactly as the foundation.
+
+Preserve:
+
+- current UP/DOWN directional logic,
+- current timeframe-aware analysis,
+- current expiry-aware analysis,
+- current entry timing logic,
+- current late-entry protection,
+- current reversal-risk detection,
+- current WAIT behavior,
+- current 5-second signal hold,
+- current early invalidation logic,
+- current overlay behavior,
+- pair detection,
+- timeframe detection,
+- and all other working functionality.
+
+Do NOT weaken or replace these systems.
+
+==================================================
+2. SLIGHTLY REDUCE EXCESSIVE CONSERVATISM
+==================================================
+
+The current engine appears to require nearly perfect confirmation before generating UP or DOWN.
+
+Relax ONLY unnecessary or redundant confirmation requirements slightly.
+
+Do NOT broadly lower all thresholds.
+
+Do NOT remove important safety filters.
+
+Instead, identify which confirmation conditions are PRIMARY and which are SECONDARY.
+
+PRIMARY evidence should have significantly more influence on the final decision.
+
+Examples of primary evidence may include:
+
+- directional structure,
+- current momentum,
+- timeframe/expiry alignment,
+- entry timing,
+- reversal risk,
+- and major support/resistance context.
+
+Secondary evidence should support the decision but should not always have veto power over an otherwise strong setup.
+
+==================================================
+3. USE WEIGHTED EVIDENCE
+==================================================
+
+Improve the final decision so that it considers the combined strength of independent evidence.
+
+Do not require every individual confirmation condition to be perfect.
+
+For example:
+
+If:
+
+DIRECTION = strong
+MOMENTUM = strong
+ENTRY TIMING = good
+TIMEFRAME/EXPIRY ALIGNMENT = good
+REVERSAL RISK = acceptable
+
+and only one secondary confirmation is neutral or slightly imperfect,
+
+the engine should be allowed to generate the signal if the TOTAL evidence remains sufficiently strong.
+
+Do NOT remain in WAIT solely because a minor secondary condition is not perfect.
+
+==================================================
+4. DISTINGUISH IMPERFECT FROM DANGEROUS
+==================================================
+
+The engine must distinguish between:
+
+A) A strong setup with a minor imperfection.
+
+B) A genuinely conflicting or dangerous setup.
+
+Case A may produce UP/DOWN.
+
+Case B must remain WAIT.
+
+Examples of genuine reasons to WAIT include:
+
+- meaningful directional conflict,
+- strong opposite momentum,
+- poor expiry alignment,
+- clearly late entry,
+- significant immediate reversal risk,
+- major support/resistance directly opposing the trade,
+- unstable or highly ambiguous price action.
+
+A minor missing confirmation should NOT be treated the same as genuine contradictory evidence.
+
+==================================================
+5. SLIGHTLY INCREASE OPPORTUNITY CAPTURE
+==================================================
+
+Allow the engine to capture somewhat more valid opportunities.
+
+Do this carefully.
+
+Do NOT target a fixed number of signals per hour.
+
+Do NOT force signals when the market does not provide good opportunities.
+
+The objective is simply:
+
+When a GOOD actionable setup exists,
+do not require it to become a PERFECT setup before signaling.
+
+==================================================
+6. DO NOT SACRIFICE ENTRY QUALITY
+==================================================
+
+More opportunities must NOT mean chasing late moves.
+
+Keep the current protection against late entries.
+
+A slightly less conservative decision should still require an actionable entry window.
+
+If the move has already happened and the entry is stale, remain in WAIT.
+
+Do not increase signal frequency by issuing late signals.
+
+==================================================
+7. KEEP TIMEFRAME AND EXPIRY AS MAJOR FACTORS
+==================================================
+
+Continue calculating the setup relative to the detected timeframe/expiry.
+
+Do NOT increase opportunity capture by ignoring expiry timing.
+
+The final question should remain:
+
+"If the user enters NOW, is there sufficient evidence that the predicted direction can remain favorable through this specific expiry?"
+
+A setup may be directionally correct but still unsuitable because of timing.
+
+Such a setup should remain WAIT.
+
+==================================================
+8. PRESERVE THE 5-SECOND SIGNAL HOLD
+==================================================
+
+Do NOT change the current 5-second signal hold behavior.
+
+When a valid UP/DOWN signal is generated:
+
+- show it immediately,
+- keep it visible for up to 5 seconds,
+- ignore minor noise,
+- continue analyzing in real time,
+- cancel early only if meaningful invalidation occurs,
+- return to WAIT after expiration.
+
+Do not modify this behavior unless required to fix an actual bug.
+
+==================================================
+9. PRESERVE STRONG INVALIDATION
+==================================================
+
+Do NOT weaken genuine reversal/invalidation protection.
+
+If a signal becomes materially invalid during the hold period, cancel it.
+
+Increasing opportunity capture must affect the INITIAL decision threshold slightly.
+
+It must NOT make the engine ignore strong evidence that a signal has become invalid.
+
+==================================================
+10. SMALL CHANGE ONLY
+==================================================
+
+This update must be conservative from a software-development perspective.
+
+Make the smallest possible changes necessary.
+
+Do NOT refactor unrelated code.
+
+Do NOT redesign architecture.
+
+Do NOT replace working components.
+
+Do NOT add WIN/LOSS tracking.
+
+Do NOT add unnecessary new features.
+
+Do NOT modify the UI unnecessarily.
+
+The current version is already performing much better.
+
+Protect that behavior.
+
+==================================================
+FINAL TARGET
+==================================================
+
+CURRENT VERSION:
+
+Very selective
+Very conservative
+Good-quality signals
+Too many potentially useful situations remain WAIT
+
+TARGET VERSION:
+
+Keep the same core accuracy-oriented behavior
++
+slightly increase decision confidence
++
+accept strong setups with minor secondary imperfections
++
+capture somewhat more valid opportunities
++
+preserve meaningful WAIT
++
+preserve entry timing
++
+preserve timeframe/expiry alignment
++
+preserve late-entry protection
++
+preserve reversal protection
++
+preserve the 5-second signal hold.
+
+DO NOT make the engine aggressive.
+
+DO NOT dramatically increase signal frequency.
+
+DO NOT trade quality for quantity.
+
+The desired change is SMALL:
+
+Move the engine from
+"ONLY NEAR-PERFECT SETUPS"
+
+toward
+"STRONG, ACTIONABLE SETUPS WITH ACCEPTABLE CALCULATED RISK."
+
+The current working version must remain the foundation.
+Implement this as a minimal Opportunity Tuning update only.
