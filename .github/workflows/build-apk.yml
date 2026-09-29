@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "LiveSignalAssistant_crash_fixed.zip"
+      - "LiveSignalAssistant_strong_locked.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -20,8 +20,8 @@ jobs:
       - name: Verify project ZIP
         shell: bash
         run: |
-          if [ ! -f "LiveSignalAssistant_crash_fixed.zip" ]; then
-            echo "ERROR: LiveSignalAssistant_crash_fixed.zip not found"
+          if [ ! -f "LiveSignalAssistant_strong_locked.zip" ]; then
+            echo "ERROR: LiveSignalAssistant_strong_locked.zip not found"
             exit 1
           fi
           echo "ZIP found successfully"
@@ -31,7 +31,7 @@ jobs:
         run: |
           rm -rf extracted
           mkdir extracted
-          unzip -q "LiveSignalAssistant_crash_fixed.zip" -d extracted
+          unzip -q "LiveSignalAssistant_strong_locked.zip" -d extracted
           echo "ZIP extracted successfully"
           find extracted -maxdepth 4 -type f | head -100
 
