@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Extract Android APK
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
       - ".github/workflows/build-apk.yml"
 
 jobs:
-  build:
+  extract-apk:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,22 +20,17 @@ jobs:
       - name: Find target ZIP
         shell: bash
         run: |
-          echo "ZIP files available in repository:"
-          find . -maxdepth 1 -type f -iname "*.zip" -print
-
           ZIP_FILE="$(find . -maxdepth 1 -type f -iname "LiveSignalAssistant-APK-*.zip" -print0 | xargs -0 -r ls -1t | head -n 1)"
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant APK ZIP not found"
+            echo "ERROR: ZIP file not found"
             exit 1
           fi
 
-          echo "Selected ZIP:"
-          printf '%s\n' "$ZIP_FILE"
-
           echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
+          echo "Selected ZIP: $ZIP_FILE"
 
-      - name: Extract project
+      - name: Extract APK
         shell: bash
         run: |
           rm -rf extracted
@@ -43,70 +38,19 @@ jobs:
 
           unzip -q "$ZIP_FILE" -d extracted
 
-          echo "ZIP extracted successfully"
+          APK_FILE="$(find extracted -type f -name "*.apk" | head -n 1)"
 
-      - name: Find Android project
-        shell: bash
-        run: |
-          SETTINGS="$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)"
-
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found inside ZIP"
-            echo "Files found inside extracted ZIP:"
-            find extracted -maxdepth 4 -type f | sort | head -200
+          if [ -z "$APK_FILE" ]; then
+            echo "ERROR: APK not found inside ZIP"
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
-
-      - name: Make Gradle wrapper executable
-        shell: bash
-        run: |
-          if [ -f "$PROJECT_DIR/gradlew" ]; then
-            chmod +x "$PROJECT_DIR/gradlew"
-          fi
-
-      - name: Build debug APK
-        shell: bash
-        run: |
-          cd "$PROJECT_DIR"
-
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --stacktrace
-          else
-            gradle assembleDebug --stacktrace
-          fi
-
-      - name: Locate APK
-        shell: bash
-        run: |
-          APK="$(find "$PROJECT_DIR" -type f -name "*.apk" | head -n 1)"
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK not found after build"
-            exit 1
-          fi
-
-          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
-          echo "APK created: $APK"
+          echo "APK_FILE=$APK_FILE" >> "$GITHUB_ENV"
+          echo "APK found: $APK_FILE"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: LiveSignalAssistant-APK
-          path: ${{ env.APK_PATH }}
+          path: ${{ env.APK_FILE }}
           if-no-files-found: error
