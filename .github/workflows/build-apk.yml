@@ -1,138 +1,94 @@
-name: Build Android APK
+Modify the existing Live Signal Assistant project without changing the working overlay UI, screen-capture system, permissions, or other currently stable features.
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "LiveSignalAssistant_FINAL_entry_engine.zip"
-      - ".github/workflows/build-apk.yml"
+The current version is significantly better, but the signal engine still develops directional bias: sometimes it produces almost only DOWN signals, while previous versions produced almost only UP signals. Fix this at the architecture level, not by simply adding an artificial UP/DOWN balance or alternating directions.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+REQUIRED SIGNAL ENGINE:
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+1. Create six completely independent candidates on every analysis cycle:
+   - UP 1m
+   - UP 2m
+   - UP 3m
+   - DOWN 1m
+   - DOWN 2m
+   - DOWN 3m
 
-      - name: Verify project ZIP
-        shell: bash
-        run: |
-          if [ ! -f "LiveSignalAssistant_FINAL_entry_engine.zip" ]; then
-            echo "ERROR: LiveSignalAssistant_FINAL_entry_engine.zip not found"
-            exit 1
-          fi
-          echo "ZIP found successfully"
+2. Recalculate all six candidates from zero on every analysis cycle.
 
-      - name: Extract project
-        shell: bash
-        run: |
-          rm -rf extracted
-          mkdir extracted
-          unzip -q "LiveSignalAssistant_FINAL_entry_engine.zip" -d extracted
-          echo "ZIP extracted successfully"
-          find extracted -maxdepth 4 -type f | head -100
+3. UP and DOWN must use mathematically symmetrical mirrored logic. Never favor a direction because previous signals were UP or DOWN. Never artificially alternate signals.
 
-      - name: Find Android project
-        id: project
-        shell: bash
-        run: |
-          SETTINGS=$(find extracted -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) | head -1)
+4. Overall market trend must be only ONE input. Trend alone must NEVER generate a signal.
 
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle/settings.gradle.kts not found"
-            find extracted -maxdepth 5 -type f
-            exit 1
-          fi
+5. Analyze the visible chart continuously and focus on ENTRY QUALITY using:
+   - recent candle/price geometry
+   - short-term momentum and acceleration
+   - immediate price movement
+   - pullbacks
+   - rejection/reversal behavior
+   - breakout and breakout continuation
+   - recent local highs and lows
+   - nearby support/resistance zones
+   - exhaustion
+   - continuation strength
+   - volatility/noise
+   - position of the current price inside the recent range
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+6. Evaluate direction AND expiry together. The engine must determine which specific combination has the strongest evidence:
+   UP-1m, UP-2m, UP-3m, DOWN-1m, DOWN-2m, or DOWN-3m.
+   Never choose direction first and randomly attach an expiry afterward.
 
-          echo "Android project found at: $PROJECT_DIR"
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+7. Use an adaptive confidence threshold:
+   - clean, strong setups may trigger quickly
+   - ambiguous/noisy/conflicting setups must remain WAIT
+   - do not lower the threshold simply to generate more signals
+   - however, avoid excessive confirmation delay that causes a genuinely strong entry to be detected after the best entry point has already passed
 
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app directory not found"
-            exit 1
-          fi
+8. WAIT must remain the default state.
+   If there is no clear statistical/technical advantage for one of the six candidates, output WAIT.
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+9. Prevent missed opportunities by analyzing frequently and reacting quickly when a new valid setup develops. Do not require so many consecutive confirmations that the entry becomes late.
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
+10. Add an internal diagnostic score for debugging:
+    UP_SCORE
+    DOWN_SCORE
+    best expiry score for each direction
+    winning candidate
+    runner-up candidate
+    score margin
+    reasons/features contributing to the score
 
-      - name: Force JVM 17 compatibility
-        shell: bash
-        run: |
-          PROJECT_DIR="${{ steps.project.outputs.dir }}"
-          BUILD_FILE="$PROJECT_DIR/app/build.gradle"
+11. A signal must NOT automatically lock the system.
 
-          if [ -f "$BUILD_FILE" ]; then
-            cat >> "$BUILD_FILE" <<'EOF'
+12. After displaying a signal, continue observing the Pocket Option screen:
+    - If the user does NOT open a trade, do not lock.
+    - If the setup expires/disappears before a trade is opened, return to WAIT and search for the next valid entry.
+    - If an open trade is detected on the screen after the signal, lock the exact signal direction, confidence and expiry.
 
-          android {
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
-          }
+13. Use stable visible Pocket Option open-trade indicators for confirmation, including the active trade marker/amount/countdown and the active-trades UI/badge when available. Do not interpret ordinary candle movement as proof that a trade was opened.
 
-          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-              kotlinOptions {
-                  jvmTarget = "17"
-              }
-          }
-          EOF
-          else
-            echo "app/build.gradle not found"
-          fi
+14. Once an open trade is confirmed:
+    LOCK the exact direction + expiry + confidence.
+    Do not change UP/DOWN or 1m/2m/3m while that trade is active.
 
-      - name: Build APK
-        shell: bash
-        run: |
-          PROJECT_DIR="${{ steps.project.outputs.dir }}"
-          cd "$PROJECT_DIR"
+15. When the active trade ends:
+    UNLOCK
+    reset previous setup state
+    return to WAIT
+    start fresh analysis.
 
-          echo "Building project from: $(pwd)"
+16. Preserve all currently working features:
+    - overlay bubble
+    - screen capture
+    - confidence display
+    - UP/DOWN display
+    - expiry display
+    - trade locking
+    - Android permissions
+    - existing stable UI
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew --no-daemon clean assembleDebug
-          else
-            gradle --no-daemon clean assembleDebug
-          fi
+IMPORTANT:
+Do not claim that confidence is a guaranteed win probability. Confidence represents the strength of evidence detected by the algorithm.
 
-      - name: Locate APK
-        id: apk
-        shell: bash
-        run: |
-          PROJECT_DIR="${{ steps.project.outputs.dir }}"
+The goal is NOT maximum signal frequency. The goal is:
+high-quality entry detection + fast reaction + symmetrical UP/DOWN analysis + correct expiry selection + WAIT during uncertainty + no directional bias.
 
-          APK=$(find "$PROJECT_DIR" -type f \
-            -path "*/build/outputs/apk/debug/*.apk" \
-            | head -1)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK not found"
-            exit 1
-          fi
-
-          echo "APK generated: $APK"
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-APK
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
+Do not rebuild unrelated parts of the application. Modify the existing working project and preserve everything that is already stable.
