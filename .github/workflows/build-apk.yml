@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "LiveSignalAssistant_overlay_fixed.zip"
+      - "LiveSignalAssistant_crash_fixed.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -20,8 +20,8 @@ jobs:
       - name: Verify project ZIP
         shell: bash
         run: |
-          if [ ! -f "LiveSignalAssistant_overlay_fixed.zip" ]; then
-            echo "ERROR: LiveSignalAssistant_overlay_fixed.zip not found"
+          if [ ! -f "LiveSignalAssistant_crash_fixed.zip" ]; then
+            echo "ERROR: LiveSignalAssistant_crash_fixed.zip not found"
             exit 1
           fi
           echo "ZIP found successfully"
@@ -31,7 +31,7 @@ jobs:
         run: |
           rm -rf extracted
           mkdir extracted
-          unzip -q "LiveSignalAssistant_overlay_fixed.zip" -d extracted
+          unzip -q "LiveSignalAssistant_crash_fixed.zip" -d extracted
           echo "ZIP extracted successfully"
           find extracted -maxdepth 4 -type f | head -100
 
@@ -39,15 +39,22 @@ jobs:
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -1)
+          SETTINGS=$(find extracted -type f \( \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          \) | head -1)
+
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle/settings.gradle.kts not found"
             find extracted -maxdepth 5 -type f
             exit 1
           fi
+
           PROJECT_DIR=$(dirname "$SETTINGS")
+
           echo "Android project found at: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
           if [ ! -d "$PROJECT_DIR/app" ]; then
             echo "ERROR: app directory not found"
             exit 1
@@ -64,17 +71,30 @@ jobs:
         with:
           gradle-version: "8.10.2"
 
-      - name: Configure Java 17 compatibility
+      - name: Force JVM 17 compatibility
         shell: bash
         run: |
           PROJECT_DIR="${{ steps.project.outputs.dir }}"
           BUILD_FILE="$PROJECT_DIR/app/build.gradle"
 
           if [ -f "$BUILD_FILE" ]; then
-            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\n\ntasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n}\n' >> "$BUILD_FILE"
-            echo "Java/Kotlin compatibility configured"
+            cat >> "$BUILD_FILE" <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
           else
-            echo "app/build.gradle not found; skipping compatibility patch"
+            echo "app/build.gradle not found"
           fi
 
       - name: Build APK
@@ -82,6 +102,7 @@ jobs:
         run: |
           PROJECT_DIR="${{ steps.project.outputs.dir }}"
           cd "$PROJECT_DIR"
+
           echo "Building project from: $(pwd)"
 
           if [ -f "./gradlew" ]; then
@@ -96,11 +117,13 @@ jobs:
         shell: bash
         run: |
           PROJECT_DIR="${{ steps.project.outputs.dir }}"
-          APK=$(find "$PROJECT_DIR" -type f -path "*/build/outputs/apk/debug/*.apk" | head -1)
+
+          APK=$(find "$PROJECT_DIR" -type f \
+            -path "*/build/outputs/apk/debug/*.apk" \
+            | head -1)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
-            find "$PROJECT_DIR" -type f -name "*.apk"
             exit 1
           fi
 
