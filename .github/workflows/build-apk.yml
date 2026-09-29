@@ -1,4 +1,4 @@
-name: Extract Android APK
+name: Build Opportunity v4 APK
 
 on:
   workflow_dispatch:
@@ -6,51 +6,77 @@ on:
     branches:
       - main
     paths:
-      - "*.zip"
+      - "LiveSignalAssistant_OPPORTUNITY_v4.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
-  extract-apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Find target ZIP
-        shell: bash
-        run: |
-          ZIP_FILE="$(find . -maxdepth 1 -type f -iname "LiveSignalAssistant-APK-*.zip" -print0 | xargs -0 -r ls -1t | head -n 1)"
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: ZIP file not found"
-            exit 1
-          fi
-
-          echo "ZIP_FILE=$ZIP_FILE" >> "$GITHUB_ENV"
-          echo "Selected ZIP: $ZIP_FILE"
-
-      - name: Extract APK
+      - name: Extract Opportunity v4 source
         shell: bash
         run: |
           rm -rf extracted
           mkdir -p extracted
+          unzip -q "LiveSignalAssistant_OPPORTUNITY_v4.zip" -d extracted
+          echo "ZIP extracted successfully"
+          find extracted -maxdepth 3 -type f | head -100
 
-          unzip -q "$ZIP_FILE" -d extracted
+      - name: Find Android project
+        shell: bash
+        run: |
+          GRADLE_FILE="$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)"
 
-          APK_FILE="$(find extracted -type f -name "*.apk" | head -n 1)"
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: Android source project not found"
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$GRADLE_FILE")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug
+          else
+            gradle assembleDebug
+          fi
+
+      - name: Find built APK
+        shell: bash
+        run: |
+          APK_FILE="$(find "$PROJECT_DIR" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)"
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK not found inside ZIP"
+            echo "ERROR: Built APK not found"
             exit 1
           fi
 
           echo "APK_FILE=$APK_FILE" >> "$GITHUB_ENV"
-          echo "APK found: $APK_FILE"
+          echo "Built APK: $APK_FILE"
 
-      - name: Upload APK
+      - name: Upload Opportunity v4 APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-APK
+          name: LiveSignalAssistant-OPPORTUNITY-v4-APK
           path: ${{ env.APK_FILE }}
           if-no-files-found: error
