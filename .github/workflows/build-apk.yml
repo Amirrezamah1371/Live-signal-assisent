@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "LiveSignalAssistant_latest_fixed.zip"
+      - "LiveSignalAssistant_overlay_fixed.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -18,27 +18,32 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify project ZIP
+        shell: bash
         run: |
-          test -f LiveSignalAssistant_latest_fixed.zip
+          test -f LiveSignalAssistant_overlay_fixed.zip
           echo "ZIP found successfully"
 
       - name: Extract project
+        shell: bash
         run: |
           rm -rf extracted
           mkdir extracted
-          unzip -q LiveSignalAssistant_latest_fixed.zip -d extracted
+          unzip -q LiveSignalAssistant_overlay_fixed.zip -d extracted
           echo "ZIP extracted successfully"
-          find extracted -maxdepth 4 -type f | sort
+          find extracted -maxdepth 4 -type f | head -100
 
       - name: Find Android project
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS=$(find extracted -type f \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
+          | head -1)
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle/settings.gradle.kts not found"
-            find extracted -maxdepth 5 -type f | sort
+            find extracted -maxdepth 5 -type f
             exit 1
           fi
 
@@ -87,7 +92,7 @@ jobs:
           }
           EOF
           else
-            echo "app/build.gradle not found; skipping Groovy JVM patch."
+            echo "app/build.gradle not found - skipping compatibility patch"
           fi
 
       - name: Build APK
@@ -111,19 +116,13 @@ jobs:
         run: |
           PROJECT_DIR="${{ steps.project.outputs.dir }}"
 
-          APK=$(find "$PROJECT_DIR" -type f -name "*.apk" | head -n 1)
+          APK=$(find "$PROJECT_DIR" -type f \
+            -path "*/build/outputs/apk/debug/*.apk" \
+            | head -1)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
             exit 1
           fi
 
-          echo "APK generated: $APK"
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-APK
-          path: ${{ steps.apk.outputs.path }}
-          if-no-files-found: error
+          echo "
