@@ -1,4 +1,4 @@
-name: Build V5 PRO Intelligence APK
+name: Build V5.1 Opportunity Rebalanced APK
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "LiveSignalAssistant_V5_PRO_INTELLIGENCE.zip"
+      - "LiveSignalAssistant_V5_1_OPPORTUNITY_REBALANCED.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -23,11 +23,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Extract V5 PRO source
+      - name: Extract V5.1 source
         run: |
           rm -rf v5-build
           mkdir v5-build
-          unzip -q LiveSignalAssistant_V5_PRO_INTELLIGENCE.zip -d v5-build
+          unzip -q LiveSignalAssistant_V5_1_OPPORTUNITY_REBALANCED.zip -d v5-build
 
       - name: Find Android project
         id: project
@@ -47,7 +47,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build V5 PRO APK
+      - name: Build V5.1 APK
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
@@ -73,9 +73,9 @@ jobs:
           echo "APK found: $APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
 
-      - name: Upload V5 PRO APK
+      - name: Upload V5.1 APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5-PRO-Intelligence-APK
+          name: LiveSignalAssistant-V5-1-Opportunity-Rebalanced-APK
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
