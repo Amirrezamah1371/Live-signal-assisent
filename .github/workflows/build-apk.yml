@@ -25,29 +25,25 @@ jobs:
         run: |
           rm -rf "$GITHUB_WORKSPACE/dualbrain-balanced-build"
           mkdir -p "$GITHUB_WORKSPACE/dualbrain-balanced-build"
-
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_BALANCED.zip"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP file not found: $ZIP"
-            exit 1
-          fi
-
-          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/dualbrain-balanced-build"
+          unzip -q "$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_BALANCED.zip" -d "$GITHUB_WORKSPACE/dualbrain-balanced-build"
 
       - name: Find Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle" -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
+            SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle.kts" -print -quit)
+          fi
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project found at: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR"
 
       - name: Build APK
         shell: bash
@@ -64,7 +60,7 @@ jobs:
       - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          APK=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
@@ -74,4 +70,9 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
           cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-BALANCED.apk"
 
-          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-DUAL-BRAIN-BALANCED
+          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-BALANCED.apk
+          if-no-files-found: error
