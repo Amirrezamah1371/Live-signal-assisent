@@ -1,27 +1,86 @@
-Continue the Live Signal Assistant DUAL BRAIN project from exactly this point.
+name: Build DUAL BRAIN
 
-The current source version is:
-LiveSignalAssistant_DUAL_BRAIN_1m_5m.zip
+on:
+  workflow_dispatch:
 
-Important requirements:
-- Keep only 1-minute and 5-minute signal horizons.
-- Do NOT restore 30-second or 4-minute signals.
-- Keep V5.5 MATURE RESTORED untouched as the benchmark.
-- DUAL BRAIN must remain a separately installable Android app.
-- Never add automatic trade execution or automatic clicking.
-- Do not use fixed signal quotas such as “maximum 3 signals per minute”.
-- Signal frequency must be determined by genuine market setups, structural changes, and new evidence.
-- Prevent signal spam using setup/wave identity and meaningful market-state changes, not arbitrary cooldowns.
-- Allow fast UP↔DOWN reversal when strong new evidence genuinely supports it.
-- Maintain independent engines for micro movement, candle/pattern structure, historical-pattern similarity, market structure, momentum/volatility, support/resistance, breakout/follow-through, exhaustion, reversal detection, and entry timing.
-- Historical similarity must compare current candle/price structures with previous structures and use subsequent historical behavior as supporting evidence only when similarity is sufficiently strong.
-- Historical evidence must never override strong new real-time evidence.
-- The central Decision Brain must combine and challenge the independent engine outputs and separately determine direction (UP/DOWN/WAIT) and entry timing (NOW/NOT NOW) for 1m and 5m.
-- Continue analysis while previous signals/trades are active.
-- Do not display fake probabilities, fake confidence percentages, or claimed win rates.
-- Optimize for low latency, precision, sensitivity to unexpected market movement, intelligent risk-taking, and avoidance of both excessive WAIT and reckless signals.
-- Preserve logs needed to distinguish direction errors, timing errors, regime errors, and historical-pattern errors.
-- Test changes on Demo only before considering them validated.
-- Do not claim any improvement in win rate unless new out-of-sample Demo results actually demonstrate it.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-First inspect the actual source code carefully. Do not guess what is inside the ZIP. Identify the current architecture and existing implementation before making any changes. Then continue development from the real code and verify every modification before producing a new build/source package.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract DUAL BRAIN
+        shell: bash
+        run: |
+          rm -rf "$GITHUB_WORKSPACE/dualbrain-build"
+          mkdir -p "$GITHUB_WORKSPACE/dualbrain-build"
+
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_1m_5m.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: ZIP file not found: $ZIP"
+            exit 1
+          fi
+
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/dualbrain-build"
+
+      - name: Find Android project
+        shell: bash
+        run: |
+          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Android project not found"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
+
+      - name: Build DUAL BRAIN APK
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "Gradle wrapper not found - using installed Gradle"
+            gradle assembleDebug --stacktrace
+          fi
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          APK=$(find "$GITHUB_WORKSPACE/dualbrain-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK not found"
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN.apk"
+
+          echo "APK CREATED:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN.apk"
+
+      - name: Upload DUAL BRAIN APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-DUAL-BRAIN
+          path: apk-output/LiveSignalAssistant-DUAL-BRAIN.apk
+          if-no-files-found: error
