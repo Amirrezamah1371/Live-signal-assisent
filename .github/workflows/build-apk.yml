@@ -49,9 +49,15 @@ jobs:
 
       - name: Build V5 PRO APK
         working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
         run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            echo "Gradle wrapper not found - using installed Gradle"
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Locate APK
         id: apk
