@@ -1,67 +1,32 @@
-name: Build V5.5 MATURE APK
+Build the Android APK from the uploaded source archive:
 
-on:
-  workflow_dispatch:
+LiveSignalAssistant_V5_6_HORIZON_TRANSFER.zip
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+IMPORTANT:
+- Do NOT redesign, rewrite, simplify, or refactor the trading logic.
+- Do NOT modify the 5-minute signal logic in any way.
+- Preserve all existing 5m scoring, thresholds, timing, entry logic, conflict handling, direction logic, and behavior exactly as provided.
+- Preserve the existing UI and overlay behavior.
+- Preserve the independent NOW signal bubbles.
+- Preserve continuous analysis while trades/signals are active.
+- The intended expiries are ONLY: 30s, 1m, and 5m.
+- Do not add fake probabilities, fake win rates, or arbitrary confidence percentages.
+- Do not add automatic trade execution or clicking.
+- Do not introduce any new global cooldown or restriction that changes signal frequency.
+- Build the source exactly as provided.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+Use Java 17 and build a DEBUG APK.
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+If the project contains ./gradlew:
+chmod +x ./gradlew
+./gradlew assembleDebug --stacktrace
 
-      - name: Extract source
-        run: |
-          rm -rf v55-build
-          mkdir -p v55-build
-          unzip -q LiveSignalAssistant_V5_5_MATURE.zip -d v55-build
+If the Gradle wrapper is absent:
+use the installed Gradle and run:
+gradle assembleDebug --stacktrace
 
-      - name: Find and build Android project
-        shell: bash
-        run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/v55-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+Locate the generated debug APK and return it as a downloadable artifact named:
 
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
-            exit 1
-          fi
+LiveSignalAssistant-V5.6-HORIZON-TRANSFER.apk
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Android project: $PROJECT_DIR"
-
-          cd "$PROJECT_DIR"
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew assembleDebug --stacktrace
-          else
-            echo "Gradle wrapper not found - using installed Gradle"
-            gradle assembleDebug --stacktrace
-          fi
-
-      - name: Collect APK
-        shell: bash
-        run: |
-          APK=$(find "$GITHUB_WORKSPACE/v55-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK not found"
-            exit 1
-          fi
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.5-MATURE.apk"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-V5-5-MATURE-APK
-          path: apk-output/LiveSignalAssistant-V5.5-MATURE.apk
-          if-no-files-found: error
+Do not make any source-code changes unless they are strictly required to resolve a compilation/build error. If a build-related source change is absolutely necessary, keep it minimal and do not alter any trading or signal-generation logic.
