@@ -1,4 +1,4 @@
-name: Build V5.5 MATURE APK
+name: Build PRO MAX APK
 
 on:
   workflow_dispatch:
@@ -20,20 +20,28 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract source
+      - name: Extract PRO MAX source
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/v55-build"
-          mkdir -p "$GITHUB_WORKSPACE/v55-build"
-          unzip -q "$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_MATURE_RESTORED.zip" -d "$GITHUB_WORKSPACE/v55-build"
+          rm -rf "$GITHUB_WORKSPACE/promax-build"
+          mkdir -p "$GITHUB_WORKSPACE/promax-build"
+
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_PRO_MAX_READY.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: LiveSignalAssistant_PRO_MAX_READY.zip not found"
+            exit 1
+          fi
+
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/promax-build"
 
       - name: Find and build Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/v55-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/promax-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
+            echo "ERROR: Android project not found inside ZIP"
             exit 1
           fi
 
@@ -53,19 +61,22 @@ jobs:
       - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/v55-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          APK=$(find "$GITHUB_WORKSPACE/promax-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not found"
+            echo "ERROR: Debug APK not found"
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.5-MATURE.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-PRO-MAX.apk"
 
-      - name: Upload APK
+          echo "APK READY:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-PRO-MAX.apk"
+
+      - name: Upload PRO MAX APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5-5-MATURE-APK
-          path: apk-output/LiveSignalAssistant-V5.5-MATURE.apk
+          name: LiveSignalAssistant-PRO-MAX-APK
+          path: apk-output/LiveSignalAssistant-PRO-MAX.apk
           if-no-files-found: error
