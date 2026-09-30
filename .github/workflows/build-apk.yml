@@ -1,4 +1,4 @@
-name: Build V5.6 HORIZON TRANSFER APK
+name: Build V5.5 MATURE APK
 
 on:
   workflow_dispatch:
@@ -20,17 +20,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract V5.6 source
+      - name: Extract source
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/v56-build"
-          mkdir -p "$GITHUB_WORKSPACE/v56-build"
-          unzip -q "$GITHUB_WORKSPACE/LiveSignalAssistant_V5_6_HORIZON_TRANSFER.zip" -d "$GITHUB_WORKSPACE/v56-build"
+          rm -rf "$GITHUB_WORKSPACE/v55-build"
+          mkdir -p "$GITHUB_WORKSPACE/v55-build"
+          unzip -q "$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_MATURE_RESTORED.zip" -d "$GITHUB_WORKSPACE/v55-build"
 
       - name: Find and build Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/v56-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/v55-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found"
@@ -53,7 +53,7 @@ jobs:
       - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/v56-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          APK=$(find "$GITHUB_WORKSPACE/v55-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
@@ -61,11 +61,11 @@ jobs:
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.6-HORIZON-TRANSFER.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.5-MATURE.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5-6-HORIZON-TRANSFER-APK
-          path: apk-output/LiveSignalAssistant-V5.6-HORIZON-TRANSFER.apk
+          name: LiveSignalAssistant-V5-5-MATURE-APK
+          path: apk-output/LiveSignalAssistant-V5.5-MATURE.apk
           if-no-files-found: error
