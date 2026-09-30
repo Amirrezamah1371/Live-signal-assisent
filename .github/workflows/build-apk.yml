@@ -1,4 +1,4 @@
-name: Build DUAL BRAIN BALANCED
+name: Build DUAL BRAIN ACCURACY
 
 on:
   workflow_dispatch:
@@ -20,32 +20,40 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract DUAL BRAIN BALANCED
+      - name: Extract ACCURACY
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/dualbrain-balanced-build"
-          mkdir -p "$GITHUB_WORKSPACE/dualbrain-balanced-build"
-          unzip -q "$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_BALANCED.zip" -d "$GITHUB_WORKSPACE/dualbrain-balanced-build"
+          rm -rf "$GITHUB_WORKSPACE/accuracy-build"
+          mkdir -p "$GITHUB_WORKSPACE/accuracy-build"
+
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_ACCURACY.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: ZIP NOT FOUND"
+            exit 1
+          fi
+
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/accuracy-build"
 
       - name: Find Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle" -print -quit)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "settings.gradle" -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle.kts" -print -quit)
+            SETTINGS=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "settings.gradle.kts" -print -quit)
           fi
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle not found"
+            echo "ERROR: Android project not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "PROJECT_DIR=$PROJECT_DIR"
+          echo "Android project: $PROJECT_DIR"
 
-      - name: Build APK
+      - name: Build ACCURACY APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
@@ -60,7 +68,7 @@ jobs:
       - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "*.apk" -print -quit)
+          APK=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
@@ -68,11 +76,14 @@ jobs:
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-BALANCED.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk"
 
-      - name: Upload APK
+          echo "APK CREATED:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk"
+
+      - name: Upload ACCURACY APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-DUAL-BRAIN-BALANCED
-          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-BALANCED.apk
+          name: LiveSignalAssistant-DUAL-BRAIN-ACCURACY
+          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk
           if-no-files-found: error
