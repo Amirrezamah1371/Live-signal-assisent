@@ -2,12 +2,6 @@ name: Build V5.5 MATURE APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "LiveSignalAssistant_V5_5_MATURE.zip"
-      - ".github/workflows/build-apk.yml"
 
 jobs:
   build:
@@ -23,34 +17,27 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Extract V5.5 MATURE
+      - name: Extract source
         run: |
           rm -rf v55-build
-          mkdir v55-build
+          mkdir -p v55-build
           unzip -q LiveSignalAssistant_V5_5_MATURE.zip -d v55-build
 
-      - name: Find Android project
-        id: project
+      - name: Find and build Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/v55-build" -type f -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/v55-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found."
+            echo "ERROR: Android project not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Project found at: $PROJECT_DIR"
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Android project: $PROJECT_DIR"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          cd "$PROJECT_DIR"
 
-      - name: Build V5.5 MATURE APK
-        working-directory: ${{ steps.project.outputs.dir }}
-        shell: bash
-        run: |
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             ./gradlew assembleDebug --stacktrace
@@ -59,19 +46,22 @@ jobs:
             gradle assembleDebug --stacktrace
           fi
 
-      - name: Locate APK
-        id: apk
+      - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "${{ steps.project.outputs.dir }}" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          APK=$(find "$GITHUB_WORKSPACE/v55-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not found."
+            echo "ERROR: APK not found"
             exit 1
           fi
 
-          echo "APK found: $APK"
-          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.5-MATURE.apk"
 
-      - name: Upload V5.5 MATURE APK
-        uses: actions/upload
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-V5-5-MATURE-APK
+          path: apk-output/LiveSignalAssistant-V5.5-MATURE.apk
+          if-no-files-found: error
