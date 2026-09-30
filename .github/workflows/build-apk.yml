@@ -1,4 +1,4 @@
-name: Build V5.2 BRAIN FIXED APK
+name: Build V5.3 FOCUSED APK
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - "LiveSignalAssistant_V5_2_BRAIN_FIXED.zip"
+      - "LiveSignalAssistant_V5_3_FOCUSED.zip"
       - ".github/workflows/build-apk.yml"
 
 jobs:
@@ -23,17 +23,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Extract V5.2 BRAIN FIXED
+      - name: Extract V5.3 FOCUSED
         run: |
-          rm -rf v5-build
-          mkdir v5-build
-          unzip -q LiveSignalAssistant_V5_2_BRAIN_FIXED.zip -d v5-build
+          rm -rf v53-build
+          mkdir v53-build
+          unzip -q LiveSignalAssistant_V5_3_FOCUSED.zip -d v53-build
 
       - name: Find Android project
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/v5-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/v53-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found."
@@ -47,7 +47,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build V5.2 BRAIN FIXED APK
+      - name: Build V5.3 FOCUSED APK
         working-directory: ${{ steps.project.outputs.dir }}
         shell: bash
         run: |
@@ -73,9 +73,9 @@ jobs:
           echo "APK found: $APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK
+      - name: Upload V5.3 FOCUSED APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5-2-BRAIN-FIXED-APK
+          name: LiveSignalAssistant-V5-3-FOCUSED-APK
           path: ${{ steps.apk.outputs.path }}
           if-no-files-found: error
