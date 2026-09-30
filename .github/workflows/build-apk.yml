@@ -1,4 +1,4 @@
-name: Build PRO MAX APK
+name: Build PRO MAX Separate App
 
 on:
   workflow_dispatch:
@@ -20,34 +20,38 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract PRO MAX source
+      - name: Extract PRO MAX
         shell: bash
         run: |
           rm -rf "$GITHUB_WORKSPACE/promax-build"
           mkdir -p "$GITHUB_WORKSPACE/promax-build"
 
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_PRO_MAX_READY.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_PRO_MAX_SEPARATE_APP.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: LiveSignalAssistant_PRO_MAX_READY.zip not found"
+            echo "ERROR: ZIP file not found: $ZIP"
             exit 1
           fi
 
           unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/promax-build"
 
-      - name: Find and build Android project
+      - name: Find Android project
         shell: bash
         run: |
           SETTINGS=$(find "$GITHUB_WORKSPACE/promax-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found inside ZIP"
+            echo "ERROR: Android project not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Android project: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
 
+      - name: Build PRO MAX APK
+        shell: bash
+        run: |
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
@@ -64,19 +68,21 @@ jobs:
           APK=$(find "$GITHUB_WORKSPACE/promax-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Debug APK not found"
+            echo "ERROR: APK not found"
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-PRO-MAX.apk"
 
-          echo "APK READY:"
+          cp "$APK" \
+          "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-PRO-MAX.apk"
+
+          echo "APK CREATED:"
           ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-PRO-MAX.apk"
 
       - name: Upload PRO MAX APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-PRO-MAX-APK
+          name: LiveSignalAssistant-PRO-MAX-SEPARATE-APP
           path: apk-output/LiveSignalAssistant-PRO-MAX.apk
           if-no-files-found: error
