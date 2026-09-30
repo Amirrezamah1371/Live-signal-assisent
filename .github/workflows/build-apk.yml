@@ -1,4 +1,4 @@
-name: Build DUAL BRAIN
+name: Build DUAL BRAIN BALANCED
 
 on:
   workflow_dispatch:
@@ -20,25 +20,25 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract DUAL BRAIN
+      - name: Extract DUAL BRAIN BALANCED
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/dualbrain-build"
-          mkdir -p "$GITHUB_WORKSPACE/dualbrain-build"
+          rm -rf "$GITHUB_WORKSPACE/dualbrain-balanced-build"
+          mkdir -p "$GITHUB_WORKSPACE/dualbrain-balanced-build"
 
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_1m_5m.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_BALANCED.zip"
 
           if [ ! -f "$ZIP" ]; then
             echo "ERROR: ZIP file not found: $ZIP"
             exit 1
           fi
 
-          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/dualbrain-build"
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/dualbrain-balanced-build"
 
       - name: Find Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-build" -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -name "settings.gradle" -o -name "settings.gradle.kts" | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found"
@@ -49,7 +49,7 @@ jobs:
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project found at: $PROJECT_DIR"
 
-      - name: Build DUAL BRAIN APK
+      - name: Build APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
@@ -58,14 +58,13 @@ jobs:
             chmod +x ./gradlew
             ./gradlew assembleDebug --stacktrace
           else
-            echo "Gradle wrapper not found - using installed Gradle"
             gradle assembleDebug --stacktrace
           fi
 
       - name: Collect APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/dualbrain-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          APK=$(find "$GITHUB_WORKSPACE/dualbrain-balanced-build" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
             echo "ERROR: APK not found"
@@ -73,14 +72,6 @@ jobs:
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-BALANCED.apk"
 
-          echo "APK CREATED:"
-          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN.apk"
-
-      - name: Upload DUAL BRAIN APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-DUAL-BRAIN
-          path: apk-output/LiveSignalAssistant-DUAL-BRAIN.apk
-          if-no-files-found: error
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN
