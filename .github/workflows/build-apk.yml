@@ -1,4 +1,4 @@
-name: Build DUAL BRAIN ACCURACY
+name: Build DUAL BRAIN PRECISION TIMING
 
 on:
   workflow_dispatch:
@@ -20,70 +20,100 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract ACCURACY
+      - name: Extract PRECISION TIMING
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/accuracy-build"
-          mkdir -p "$GITHUB_WORKSPACE/accuracy-build"
+          rm -rf "$GITHUB_WORKSPACE/precision-timing-build"
+          mkdir -p "$GITHUB_WORKSPACE/precision-timing-build"
 
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_ACCURACY.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_PRECISION_TIMING.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP NOT FOUND"
+            echo "ERROR: ZIP NOT FOUND: $ZIP"
+            echo "Repository files:"
+            ls -lah "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/accuracy-build"
+          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/precision-timing-build"
+
+          echo "ZIP extracted successfully."
 
       - name: Find Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "settings.gradle" -print -quit)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "settings.gradle" -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "settings.gradle.kts" -print -quit)
+            SETTINGS=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "settings.gradle.kts" -print -quit)
           fi
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
+            echo "ERROR: Android project not found."
+            find "$GITHUB_WORKSPACE/precision-timing-build" -maxdepth 4 -type f | head -100
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project: $PROJECT_DIR"
 
-      - name: Build ACCURACY APK
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found:"
+          echo "$PROJECT_DIR"
+
+      - name: Show project information
+        shell: bash
+        run: |
+          echo "PROJECT_DIR=$PROJECT_DIR"
+          ls -lah "$PROJECT_DIR"
+
+      - name: Build PRECISION TIMING APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
+            echo "Using Gradle Wrapper"
             chmod +x ./gradlew
             ./gradlew assembleDebug --stacktrace
           else
+            echo "Gradle Wrapper not found. Using installed Gradle."
             gradle assembleDebug --stacktrace
           fi
 
-      - name: Collect APK
+      - name: Find generated APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/accuracy-build" -type f -name "*.apk" -print -quit)
+          APK=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -path "*/build/outputs/apk/debug/*.apk" -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not found"
+            echo "Debug APK not found. Searching all APK files..."
+            APK=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "*.apk" -print -quit)
+          fi
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK NOT FOUND"
             exit 1
           fi
 
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+          echo "APK found:"
+          echo "$APK"
+
+      - name: Prepare final APK
+        shell: bash
+        run: |
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk"
 
-          echo "APK CREATED:"
-          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk"
+          cp "$APK_PATH" \
+            "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk"
 
-      - name: Upload ACCURACY APK
+          echo "FINAL APK:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk"
+
+      - name: Upload PRECISION TIMING APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-DUAL-BRAIN-ACCURACY
-          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-ACCURACY.apk
+          name: LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING
+          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk
           if-no-files-found: error
+          retention-days: 30
