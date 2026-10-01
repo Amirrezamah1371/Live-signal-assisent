@@ -1,4 +1,4 @@
-name: Build ONE DECISION MEMORY 7.0
+name: Build MEMORY SAFE 7.0.2
 
 on:
   workflow_dispatch:
@@ -27,17 +27,17 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Find 7.0 source ZIP
+      - name: Find 7.0.2 source ZIP
         id: source
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_7_0_ONE_DECISION_MEMORY.zip' -print -quit)"
+          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_7_0_2_MEMORY_SAFE.zip' -print -quit)"
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: LiveSignalAssistant_7_0_ONE_DECISION_MEMORY.zip not found."
-            echo "ZIP files currently in repository:"
+            echo "ERROR: LiveSignalAssistant_7_0_2_MEMORY_SAFE.zip not found."
+            echo "Available ZIP files:"
             find . -maxdepth 2 -type f -name '*.zip' -print || true
             exit 1
           fi
@@ -50,13 +50,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          rm -rf "$RUNNER_TEMP/lsa70"
-          mkdir -p "$RUNNER_TEMP/lsa70"
+          rm -rf "$RUNNER_TEMP/lsa702"
+          mkdir -p "$RUNNER_TEMP/lsa702"
 
-          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa70"
+          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa702"
 
-          echo "Extracted source:"
-          find "$RUNNER_TEMP/lsa70" -maxdepth 3 -type f | head -100
+          echo "Source extracted successfully."
+          find "$RUNNER_TEMP/lsa702" -maxdepth 3 -type f | head -100
 
       - name: Locate Android project
         id: project
@@ -64,16 +64,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          SETTINGS="$(find "$RUNNER_TEMP/lsa70" -type f -name 'settings.gradle' -print -quit)"
+          SETTINGS="$(find "$RUNNER_TEMP/lsa702" -type f -name 'settings.gradle' -print -quit)"
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS="$(find "$RUNNER_TEMP/lsa70" -type f -name 'settings.gradle.kts' -print -quit)"
+            SETTINGS="$(find "$RUNNER_TEMP/lsa702" -type f -name 'settings.gradle.kts' -print -quit)"
           fi
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android Gradle project not found."
-            echo "Extracted files:"
-            find "$RUNNER_TEMP/lsa70" -maxdepth 5 -type f -print
+            find "$RUNNER_TEMP/lsa702" -maxdepth 6 -type f -print
             exit 1
           fi
 
@@ -89,10 +88,12 @@ jobs:
           set -euo pipefail
 
           echo "=== Gradle files ==="
-          find . -maxdepth 3 -type f \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'gradle.properties' \) -print
+          find . -maxdepth 3 -type f -name 'build.gradle' -print
+          find . -maxdepth 3 -type f -name 'build.gradle.kts' -print
+          find . -maxdepth 3 -type f -name 'gradle.properties' -print
 
-          echo "=== Android source files ==="
-          find . -type f -name '*.kt' -print | head -100 || true
+          echo "=== Kotlin source ==="
+          find . -type f -name '*.kt' -print | head -150 || true
 
           echo "=== Manifest ==="
           find . -type f -name 'AndroidManifest.xml' -print
@@ -107,12 +108,11 @@ jobs:
             chmod +x ./gradlew
             ./gradlew clean assembleDebug --stacktrace --no-daemon
           else
-            echo "Gradle wrapper not found; using installed Gradle."
+            echo "Gradle wrapper not found. Using installed Gradle."
             gradle clean assembleDebug --stacktrace --no-daemon
           fi
 
       - name: Collect APK
-        id: apk
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
@@ -121,22 +121,22 @@ jobs:
           APK="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Build finished but debug APK was not found."
+            echo "ERROR: Debug APK not found."
             find . -type f -name '*.apk' -print || true
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/release"
 
-          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-MEMORY-SAFE-7.0.2.apk"
 
-          echo "APK created:"
-          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk"
+          echo "=== APK READY ==="
+          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-MEMORY-SAFE-7.0.2.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-ONE-DECISION-MEMORY-7.0
-          path: release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk
+          name: LiveSignalAssistant-MEMORY-SAFE-7.0.2
+          path: release/LiveSignalAssistant-MEMORY-SAFE-7.0.2.apk
           if-no-files-found: error
           retention-days: 30
