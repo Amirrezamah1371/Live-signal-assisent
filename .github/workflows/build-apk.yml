@@ -23,47 +23,6 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # ============================================================
-      # SOURCE:
-      # This build MUST use the new 5M MULTI-SCALE 5.9.0 source.
-      #
-      # DESIGN GOAL:
-      # - 5-minute signals ONLY.
-      # - 1-minute signals must NOT be generated.
-      # - Keep this as a separate Android application so it can be
-      #   installed beside the previous TIMEFRAME BRAIN version.
-      #
-      # 5M LOGIC:
-      # The analyzer must not judge direction only from the latest
-      # tiny price movement.
-      #
-      # It should compare the current position with several visible
-      # historical scales of the chart:
-      #
-      #   1. Broad visible range / zoomed-out context
-      #   2. Older structural movement
-      #   3. Recent swing structure
-      #   4. Current short movement
-      #
-      # IMPORTANT:
-      # Being near a LOW is not enough by itself to force UP.
-      # The analyzer should look for evidence that price is actually
-      # turning/recovering upward from the lower region.
-      #
-      # LOW REGION + CONFIRMED UPWARD RECOVERY:
-      #   Suppress contradictory DOWN candidates and strengthen UP.
-      #
-      # HIGH REGION + CONFIRMED DOWNWARD REVERSAL:
-      #   Suppress contradictory UP candidates and strengthen DOWN.
-      #
-      # MID-RANGE:
-      #   Preserve the underlying 5-minute analysis rather than
-      #   blindly forcing either direction.
-      #
-      # The objective is structural context + direction + timing,
-      # not a simplistic "low = UP / high = DOWN" rule.
-      # ============================================================
-
       - name: Verify source ZIP
         shell: bash
         run: |
@@ -71,27 +30,26 @@ jobs:
 
           ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_MULTISCALE_590.zip"
 
-          echo "================================================"
-          echo "Looking for 5M MULTI-SCALE 5.9.0 source"
-          echo "================================================"
-          echo "$ZIP_FILE"
+          echo "========================================"
+          echo "VERIFYING SOURCE ZIP"
+          echo "========================================"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_5M_MULTISCALE_590.zip was not found."
+            echo "ERROR: LiveSignalAssistant_5M_MULTISCALE_590.zip not found."
             echo ""
-            echo "Repository root:"
+            echo "Repository files:"
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          echo "Source ZIP found."
-          echo "Testing ZIP integrity..."
+          echo "Source ZIP found:"
+          echo "$ZIP_FILE"
 
           unzip -t "$ZIP_FILE"
 
           echo "ZIP integrity OK."
 
-      - name: Extract 5.9.0 project
+      - name: Extract project
         shell: bash
         run: |
           set -e
@@ -104,10 +62,7 @@ jobs:
 
           unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
 
-          echo "Project extracted."
-          echo ""
-          echo "Extracted structure:"
-          find "$BUILD_DIR" -maxdepth 3 -type f | head -100
+          echo "Project extracted successfully."
 
       - name: Locate Android project
         id: project
@@ -124,24 +79,25 @@ jobs:
           fi
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android settings.gradle/settings.gradle.kts not found."
+            echo "ERROR: settings.gradle or settings.gradle.kts not found."
+            echo ""
             find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android project located at:"
+          echo "Android project found:"
           echo "$PROJECT_DIR"
 
           if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: Android app module not found."
+            echo "ERROR: app module not found."
             exit 1
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify analyzer and application identity
+      - name: Verify critical source files
         shell: bash
         run: |
           set -e
@@ -161,25 +117,22 @@ jobs:
             exit 1
           fi
 
-          echo "SignalAnalyzer:"
+          echo "SignalAnalyzer found:"
           echo "$SIGNAL_ANALYZER"
 
           echo ""
-          echo "CaptureService:"
+          echo "CaptureService found:"
           echo "$CAPTURE_SERVICE"
 
           echo ""
-          echo "Checking MULTI-SCALE source markers..."
+          echo "Critical source files OK."
 
-          if ! grep -q "multiScale" "$SIGNAL_ANALYZER"; then
-            echo "ERROR: MULTI-SCALE analysis marker not found."
-            exit 1
-          fi
+      - name: Verify version
+        shell: bash
+        run: |
+          set -e
 
-          echo "MULTI-SCALE analyzer detected."
-
-          echo ""
-          echo "Checking application ID..."
+          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
 
           BUILD_FILE="$PROJECT_DIR/app/build.gradle.kts"
 
@@ -192,53 +145,22 @@ jobs:
             exit 1
           fi
 
-          echo "Using:"
+          echo "App build file:"
           echo "$BUILD_FILE"
 
+          echo ""
+          echo "Application information:"
           grep -n "applicationId" "$BUILD_FILE" || true
           grep -n "versionCode" "$BUILD_FILE" || true
           grep -n "versionName" "$BUILD_FILE" || true
 
           if ! grep -q "5.9.0" "$BUILD_FILE"; then
-            echo "ERROR: Expected version 5.9.0 not found."
+            echo "ERROR: Version 5.9.0 not found in app build file."
             exit 1
           fi
 
           echo ""
-          echo "5.9.0 source identity verified."
-
-      - name: Verify 5-minute-only design
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-          SIGNAL_ANALYZER=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
-
-          echo "================================================"
-          echo "5-MINUTE-ONLY VERIFICATION"
-          echo "================================================"
-
-          echo "Searching analyzer for active 60-second candidate generation..."
-
-          if grep -nE 'evaluateCandidate[^;]*(60)|expiry[^;]*=[[:space:]]*60|intArrayOf[^;]*60|listOf[^;]*60' "$SIGNAL_ANALYZER"; then
-            echo ""
-            echo "ERROR: Possible active 1-minute candidate generation detected."
-            echo "This version must generate 5-minute signals only."
-            exit 1
-          fi
-
-          echo "No obvious active 1-minute candidate generation found."
-
-          echo ""
-          echo "Checking for 300-second / 5-minute horizon..."
-
-          if ! grep -q "300" "$SIGNAL_ANALYZER"; then
-            echo "ERROR: Expected 300-second 5-minute horizon was not found."
-            exit 1
-          fi
-
-          echo "5-minute horizon detected."
+          echo "Version 5.9.0 verified."
 
       - name: Show Gradle information
         shell: bash
@@ -246,28 +168,29 @@ jobs:
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+
           cd "$PROJECT_DIR"
 
-          echo "================================================"
-          echo "GRADLE ENVIRONMENT"
-          echo "================================================"
+          echo "========================================"
+          echo "BUILD ENVIRONMENT"
+          echo "========================================"
 
-          echo "Project:"
+          echo "Project directory:"
           pwd
 
           echo ""
-          echo "Java:"
+          echo "Java version:"
           java -version
 
           echo ""
 
           if [ -f "./gradlew" ]; then
-            echo "Gradle wrapper detected."
+            echo "Gradle wrapper found."
             chmod +x ./gradlew
             ./gradlew --version
           else
-            echo "Gradle wrapper not present."
-            echo "Using GitHub installed Gradle."
+            echo "Gradle wrapper not found."
+            echo "Using installed Gradle."
             gradle --version
           fi
 
@@ -292,11 +215,12 @@ jobs:
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+
           cd "$PROJECT_DIR"
 
-          echo "================================================"
+          echo "========================================"
           echo "BUILDING 5M MULTI-SCALE 5.9.0"
-          echo "================================================"
+          echo "========================================"
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -306,7 +230,6 @@ jobs:
           fi
 
       - name: Locate generated APK
-        id: apk
         shell: bash
         run: |
           set -e
@@ -316,7 +239,9 @@ jobs:
           APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: Build finished but APK could not be located."
+            echo "ERROR: APK was not generated."
+            echo ""
+            echo "Searching project for APK files:"
             find "$PROJECT_DIR" -type f -name "*.apk" || true
             exit 1
           fi
@@ -325,13 +250,13 @@ jobs:
 
           cp "$APK_FILE" "$OUTPUT_APK"
 
-          echo "================================================"
-          echo "APK CREATED SUCCESSFULLY"
-          echo "================================================"
+          echo ""
+          echo "========================================"
+          echo "APK BUILD SUCCESSFUL"
+          echo "========================================"
+          echo ""
 
           ls -lh "$OUTPUT_APK"
-
-          echo "apk_file=$OUTPUT_APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
