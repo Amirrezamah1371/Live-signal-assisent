@@ -1,4 +1,4 @@
-name: Build ADAPTIVE HORIZON 6.2.0
+name: Build COHERENT ADAPTIVE 6.3.0
 
 on:
   workflow_dispatch:
@@ -28,10 +28,10 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip not found."
+            echo "ERROR: LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip not found."
             echo "Repository contents:"
             ls -la "$GITHUB_WORKSPACE"
             exit 1
@@ -45,8 +45,8 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip"
-          BUILD_DIR="$GITHUB_WORKSPACE/adaptive-horizon-620-build"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip"
+          BUILD_DIR="$GITHUB_WORKSPACE/coherent-adaptive-630-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
@@ -61,7 +61,7 @@ jobs:
         run: |
           set -e
 
-          BUILD_DIR="$GITHUB_WORKSPACE/adaptive-horizon-620-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/coherent-adaptive-630-build"
 
           SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle" | head -1)
 
@@ -70,7 +70,7 @@ jobs:
           fi
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android project not found."
+            echo "ERROR: settings.gradle/settings.gradle.kts not found."
             find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
@@ -82,12 +82,10 @@ jobs:
             exit 1
           fi
 
-          echo "Android project:"
-          echo "$PROJECT_DIR"
-
+          echo "Android project: $PROJECT_DIR"
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify critical source files
+      - name: Verify source files
         shell: bash
         run: |
           set -e
@@ -107,15 +105,10 @@ jobs:
             exit 1
           fi
 
-          echo "SignalAnalyzer:"
-          echo "$SIGNAL_ANALYZER"
+          echo "SignalAnalyzer: $SIGNAL_ANALYZER"
+          echo "CaptureService: $CAPTURE_SERVICE"
 
-          echo "CaptureService:"
-          echo "$CAPTURE_SERVICE"
-
-          echo "Critical source files OK."
-
-      - name: Show application identity and version
+      - name: Show application information
         shell: bash
         run: |
           set -e
@@ -141,37 +134,7 @@ jobs:
           grep -n "versionCode" "$BUILD_FILE" || true
           grep -n "versionName" "$BUILD_FILE" || true
 
-      - name: Show Gradle environment
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-          cd "$PROJECT_DIR"
-
-          java -version
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew --version
-          else
-            gradle --version
-          fi
-
-      - name: Clean previous outputs
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
-          rm -rf "$PROJECT_DIR/app/build"
-          rm -rf "$PROJECT_DIR/build"
-          rm -rf "$GITHUB_WORKSPACE/apk-output"
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-
-      - name: Build ADAPTIVE HORIZON APK
+      - name: Build APK
         shell: bash
         run: |
           set -e
@@ -180,7 +143,7 @@ jobs:
           cd "$PROJECT_DIR"
 
           echo "========================================"
-          echo "BUILDING ADAPTIVE HORIZON 6.2.0"
+          echo "BUILDING COHERENT ADAPTIVE 6.3.0"
           echo "========================================"
 
           if [ -f "./gradlew" ]; then
@@ -190,7 +153,7 @@ jobs:
             gradle clean assembleDebug --stacktrace --no-daemon
           fi
 
-      - name: Locate generated APK
+      - name: Collect APK
         shell: bash
         run: |
           set -e
@@ -200,12 +163,14 @@ jobs:
           APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK was not generated."
+            echo "ERROR: APK not generated."
             find "$PROJECT_DIR" -type f -name "*.apk" || true
             exit 1
           fi
 
-          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0.apk"
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+
+          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0.apk"
 
           cp "$APK_FILE" "$OUTPUT_APK"
 
@@ -218,7 +183,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0
-          path: apk-output/LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0.apk
+          name: LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0
+          path: apk-output/LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0.apk
           if-no-files-found: error
           retention-days: 30
