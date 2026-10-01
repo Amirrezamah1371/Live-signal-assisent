@@ -1,4 +1,4 @@
-name: Build DUAL BRAIN PRECISION TIMING
+name: Build DUAL BRAIN MATURE
 
 on:
   workflow_dispatch:
@@ -20,100 +20,153 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract PRECISION TIMING
+      - name: Verify source ZIP
         shell: bash
         run: |
-          rm -rf "$GITHUB_WORKSPACE/precision-timing-build"
-          mkdir -p "$GITHUB_WORKSPACE/precision-timing-build"
-
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_PRECISION_TIMING.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_MATURE.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP NOT FOUND: $ZIP"
-            echo "Repository files:"
+            echo "ERROR: Source ZIP not found:"
+            echo "$ZIP"
+            echo ""
+            echo "Files in repository root:"
             ls -lah "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          unzip -q "$ZIP" -d "$GITHUB_WORKSPACE/precision-timing-build"
+          echo "Source ZIP found:"
+          ls -lh "$ZIP"
 
-          echo "ZIP extracted successfully."
+          echo "Testing ZIP integrity..."
+          unzip -t "$ZIP"
+
+      - name: Extract DUAL BRAIN MATURE
+        shell: bash
+        run: |
+          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+
+          rm -rf "$BUILD_DIR"
+          mkdir -p "$BUILD_DIR"
+
+          unzip -q \
+            "$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_MATURE.zip" \
+            -d "$BUILD_DIR"
+
+          echo "Source extracted successfully."
 
       - name: Find Android project
         shell: bash
         run: |
-          SETTINGS=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "settings.gradle" -print -quit)
+          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+
+          SETTINGS=$(find "$BUILD_DIR" -type f -name "settings.gradle" -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "settings.gradle.kts" -print -quit)
+            SETTINGS=$(find "$BUILD_DIR" -type f -name "settings.gradle.kts" -print -quit)
           fi
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found."
-            find "$GITHUB_WORKSPACE/precision-timing-build" -maxdepth 4 -type f | head -100
+            echo ""
+            echo "Extracted files:"
+            find "$BUILD_DIR" -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
           echo "Android project found:"
           echo "$PROJECT_DIR"
 
-      - name: Show project information
+      - name: Inspect Android project
         shell: bash
         run: |
           echo "PROJECT_DIR=$PROJECT_DIR"
+          echo ""
+
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "ERROR: PROJECT_DIR does not exist."
+            exit 1
+          fi
+
           ls -lah "$PROJECT_DIR"
 
-      - name: Build PRECISION TIMING APK
+      - name: Build DUAL BRAIN MATURE APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
-            echo "Using Gradle Wrapper"
+            echo "Using project Gradle Wrapper."
             chmod +x ./gradlew
+            ./gradlew --version
             ./gradlew assembleDebug --stacktrace
           else
-            echo "Gradle Wrapper not found. Using installed Gradle."
+            echo "Gradle Wrapper not found."
+            echo "Using installed Gradle."
+            gradle --version
             gradle assembleDebug --stacktrace
           fi
 
-      - name: Find generated APK
+      - name: Locate generated APK
         shell: bash
         run: |
-          APK=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -path "*/build/outputs/apk/debug/*.apk" -print -quit)
+          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+
+          APK=$(find "$BUILD_DIR" \
+            -type f \
+            -path "*/build/outputs/apk/debug/*.apk" \
+            -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "Debug APK not found. Searching all APK files..."
-            APK=$(find "$GITHUB_WORKSPACE/precision-timing-build" -type f -name "*.apk" -print -quit)
+            echo "Standard debug APK path not found."
+            echo "Searching for any generated APK..."
+
+            APK=$(find "$BUILD_DIR" \
+              -type f \
+              -name "*.apk" \
+              -print -quit)
           fi
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK NOT FOUND"
+            echo "ERROR: Build completed but APK could not be found."
+            echo ""
+            echo "Build output directories:"
+            find "$BUILD_DIR" -type d -path "*/build/outputs*" -print || true
             exit 1
           fi
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
-          echo "APK found:"
-          echo "$APK"
+
+          echo "Generated APK:"
+          ls -lh "$APK"
 
       - name: Prepare final APK
         shell: bash
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          OUTPUT_DIR="$GITHUB_WORKSPACE/apk-output"
 
-          cp "$APK_PATH" \
-            "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk"
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$OUTPUT_DIR"
 
-          echo "FINAL APK:"
-          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk"
+          FINAL_APK="$OUTPUT_DIR/LiveSignalAssistant-DUAL-BRAIN-MATURE.apk"
 
-      - name: Upload PRECISION TIMING APK
+          cp "$APK_PATH" "$FINAL_APK"
+
+          if [ ! -s "$FINAL_APK" ]; then
+            echo "ERROR: Final APK is missing or empty."
+            exit 1
+          fi
+
+          echo "Final APK ready:"
+          ls -lh "$FINAL_APK"
+
+      - name: Upload DUAL BRAIN MATURE APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING
-          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-PRECISION-TIMING.apk
+          name: LiveSignalAssistant-DUAL-BRAIN-MATURE
+          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-MATURE.apk
           if-no-files-found: error
           retention-days: 30
