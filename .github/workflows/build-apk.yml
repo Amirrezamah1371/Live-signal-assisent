@@ -1,4 +1,4 @@
-name: Build DUAL BRAIN MATURE
+name: Build V5.5 PRECISION EVOLUTION
 
 on:
   workflow_dispatch:
@@ -23,13 +23,13 @@ jobs:
       - name: Verify source ZIP
         shell: bash
         run: |
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_MATURE.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_PRECISION_EVOLUTION.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found:"
+            echo "ERROR: ZIP NOT FOUND"
             echo "$ZIP"
             echo ""
-            echo "Files in repository root:"
+            echo "Repository files:"
             ls -lah "$GITHUB_WORKSPACE"
             exit 1
           fi
@@ -37,27 +37,27 @@ jobs:
           echo "Source ZIP found:"
           ls -lh "$ZIP"
 
-          echo "Testing ZIP integrity..."
+          echo "Checking ZIP integrity..."
           unzip -t "$ZIP"
 
-      - name: Extract DUAL BRAIN MATURE
+      - name: Extract V5.5 PRECISION EVOLUTION
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
           unzip -q \
-            "$GITHUB_WORKSPACE/LiveSignalAssistant_DUAL_BRAIN_MATURE.zip" \
+            "$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_PRECISION_EVOLUTION.zip" \
             -d "$BUILD_DIR"
 
-          echo "Source extracted successfully."
+          echo "Extraction completed."
 
       - name: Find Android project
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
 
           SETTINGS=$(find "$BUILD_DIR" -type f -name "settings.gradle" -print -quit)
 
@@ -69,7 +69,7 @@ jobs:
             echo "ERROR: Android project not found."
             echo ""
             echo "Extracted files:"
-            find "$BUILD_DIR" -maxdepth 5 -type f | sort
+            find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
 
@@ -77,43 +77,46 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project found:"
+          echo "Android project:"
           echo "$PROJECT_DIR"
 
-      - name: Inspect Android project
+      - name: Verify project
         shell: bash
         run: |
-          echo "PROJECT_DIR=$PROJECT_DIR"
-          echo ""
-
           if [ ! -d "$PROJECT_DIR" ]; then
             echo "ERROR: PROJECT_DIR does not exist."
             exit 1
           fi
 
+          echo "Project directory:"
           ls -lah "$PROJECT_DIR"
 
-      - name: Build DUAL BRAIN MATURE APK
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app module not found."
+            exit 1
+          fi
+
+      - name: Build V5.5 PRECISION EVOLUTION APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
-            echo "Using project Gradle Wrapper."
+            echo "Using Gradle Wrapper"
             chmod +x ./gradlew
             ./gradlew --version
-            ./gradlew assembleDebug --stacktrace
+            ./gradlew clean assembleDebug --stacktrace
           else
             echo "Gradle Wrapper not found."
             echo "Using installed Gradle."
             gradle --version
-            gradle assembleDebug --stacktrace
+            gradle clean assembleDebug --stacktrace
           fi
 
-      - name: Locate generated APK
+      - name: Find generated APK
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/dual-brain-mature-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
 
           APK=$(find "$BUILD_DIR" \
             -type f \
@@ -121,8 +124,8 @@ jobs:
             -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "Standard debug APK path not found."
-            echo "Searching for any generated APK..."
+            echo "Standard debug APK not found."
+            echo "Searching all APK files..."
 
             APK=$(find "$BUILD_DIR" \
               -type f \
@@ -131,16 +134,16 @@ jobs:
           fi
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Build completed but APK could not be found."
+            echo "ERROR: APK NOT FOUND."
             echo ""
-            echo "Build output directories:"
+            echo "Build output:"
             find "$BUILD_DIR" -type d -path "*/build/outputs*" -print || true
             exit 1
           fi
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-          echo "Generated APK:"
+          echo "APK generated successfully:"
           ls -lh "$APK"
 
       - name: Prepare final APK
@@ -151,7 +154,7 @@ jobs:
           rm -rf "$OUTPUT_DIR"
           mkdir -p "$OUTPUT_DIR"
 
-          FINAL_APK="$OUTPUT_DIR/LiveSignalAssistant-DUAL-BRAIN-MATURE.apk"
+          FINAL_APK="$OUTPUT_DIR/LiveSignalAssistant-V5.5-PRECISION-EVOLUTION.apk"
 
           cp "$APK_PATH" "$FINAL_APK"
 
@@ -160,13 +163,13 @@ jobs:
             exit 1
           fi
 
-          echo "Final APK ready:"
+          echo "Final APK:"
           ls -lh "$FINAL_APK"
 
-      - name: Upload DUAL BRAIN MATURE APK
+      - name: Upload V5.5 PRECISION EVOLUTION APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-DUAL-BRAIN-MATURE
-          path: apk-output/LiveSignalAssistant-DUAL-BRAIN-MATURE.apk
+          name: LiveSignalAssistant-V5.5-PRECISION-EVOLUTION
+          path: apk-output/LiveSignalAssistant-V5.5-PRECISION-EVOLUTION.apk
           if-no-files-found: error
           retention-days: 30
