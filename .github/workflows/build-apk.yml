@@ -1,4 +1,4 @@
-name: Build V5.5 PRECISION EVOLUTION
+name: Build V5.5 TIMEFRAME BRAIN
 
 on:
   workflow_dispatch:
@@ -23,52 +23,77 @@ jobs:
       - name: Verify source ZIP
         shell: bash
         run: |
-          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_PRECISION_EVOLUTION.zip"
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN.zip"
+
+          echo "Looking for:"
+          echo "$ZIP"
 
           if [ ! -f "$ZIP" ]; then
             echo "ERROR: ZIP NOT FOUND"
-            echo "$ZIP"
             echo ""
-            echo "Repository files:"
+            echo "Repository root contents:"
             ls -lah "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          echo "Source ZIP found:"
+          echo "ZIP found successfully:"
           ls -lh "$ZIP"
 
-          echo "Checking ZIP integrity..."
+          echo ""
+          echo "Testing ZIP integrity..."
+
           unzip -t "$ZIP"
 
-      - name: Extract V5.5 PRECISION EVOLUTION
+          if [ $? -ne 0 ]; then
+            echo "ERROR: ZIP integrity test failed."
+            exit 1
+          fi
+
+          echo "ZIP integrity OK."
+
+      - name: Prepare build directory
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/timeframe-brain-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
-          unzip -q \
-            "$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_PRECISION_EVOLUTION.zip" \
-            -d "$BUILD_DIR"
+          echo "BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
+
+      - name: Extract TIMEFRAME BRAIN
+        shell: bash
+        run: |
+          ZIP="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN.zip"
+
+          unzip -q "$ZIP" -d "$BUILD_DIR"
 
           echo "Extraction completed."
+          echo ""
+          echo "Extracted root:"
+          ls -lah "$BUILD_DIR"
 
       - name: Find Android project
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
-
-          SETTINGS=$(find "$BUILD_DIR" -type f -name "settings.gradle" -print -quit)
+          SETTINGS=$(find "$BUILD_DIR" \
+            -type f \
+            -name "settings.gradle" \
+            -print \
+            -quit)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$BUILD_DIR" -type f -name "settings.gradle.kts" -print -quit)
+            SETTINGS=$(find "$BUILD_DIR" \
+              -type f \
+              -name "settings.gradle.kts" \
+              -print \
+              -quit)
           fi
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found."
+            echo "ERROR: settings.gradle or settings.gradle.kts not found."
             echo ""
-            echo "Extracted files:"
+            echo "Files extracted from ZIP:"
             find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
@@ -77,73 +102,154 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project:"
+          echo "Android project found:"
           echo "$PROJECT_DIR"
 
-      - name: Verify project
+      - name: Verify Android project
         shell: bash
         run: |
+          echo "PROJECT_DIR:"
+          echo "$PROJECT_DIR"
+          echo ""
+
           if [ ! -d "$PROJECT_DIR" ]; then
-            echo "ERROR: PROJECT_DIR does not exist."
+            echo "ERROR: Android project directory does not exist."
             exit 1
           fi
-
-          echo "Project directory:"
-          ls -lah "$PROJECT_DIR"
 
           if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module not found."
+            echo "ERROR: Android app module not found."
             exit 1
           fi
 
-      - name: Build V5.5 PRECISION EVOLUTION APK
+          if [ ! -f "$PROJECT_DIR/build.gradle" ] && \
+             [ ! -f "$PROJECT_DIR/build.gradle.kts" ]; then
+            echo "ERROR: Root Gradle build file not found."
+            exit 1
+          fi
+
+          echo "Android project structure verified."
+          echo ""
+          ls -lah "$PROJECT_DIR"
+
+      - name: Verify TIMEFRAME BRAIN source
+        shell: bash
+        run: |
+          ANALYZER=$(find "$PROJECT_DIR/app/src" \
+            -type f \
+            -name "SignalAnalyzer.kt" \
+            -print \
+            -quit)
+
+          CAPTURE=$(find "$PROJECT_DIR/app/src" \
+            -type f \
+            -name "CaptureService.kt" \
+            -print \
+            -quit)
+
+          if [ -z "$ANALYZER" ]; then
+            echo "ERROR: SignalAnalyzer.kt not found."
+            exit 1
+          fi
+
+          if [ -z "$CAPTURE" ]; then
+            echo "ERROR: CaptureService.kt not found."
+            exit 1
+          fi
+
+          echo "SignalAnalyzer:"
+          echo "$ANALYZER"
+
+          echo ""
+          echo "CaptureService:"
+          echo "$CAPTURE"
+
+          echo ""
+          echo "TIMEFRAME BRAIN source verified."
+
+      - name: Clean previous build outputs
+        shell: bash
+        run: |
+          cd "$PROJECT_DIR"
+
+          rm -rf app/build
+          rm -rf build
+
+          echo "Previous build outputs removed."
+
+      - name: Build TIMEFRAME BRAIN APK
         shell: bash
         run: |
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
-            echo "Using Gradle Wrapper"
+            echo "Gradle Wrapper detected."
+
             chmod +x ./gradlew
+
+            echo ""
+            echo "Gradle version:"
             ./gradlew --version
-            ./gradlew clean assembleDebug --stacktrace
+
+            echo ""
+            echo "Building debug APK..."
+
+            ./gradlew clean assembleDebug \
+              --stacktrace \
+              --no-daemon
+
           else
             echo "Gradle Wrapper not found."
             echo "Using installed Gradle."
+
+            echo ""
+            echo "Gradle version:"
             gradle --version
-            gradle clean assembleDebug --stacktrace
+
+            echo ""
+            echo "Building debug APK..."
+
+            gradle clean assembleDebug \
+              --stacktrace \
+              --no-daemon
           fi
 
       - name: Find generated APK
         shell: bash
         run: |
-          BUILD_DIR="$GITHUB_WORKSPACE/v55-precision-evolution-build"
-
-          APK=$(find "$BUILD_DIR" \
+          APK=$(find "$PROJECT_DIR" \
             -type f \
             -path "*/build/outputs/apk/debug/*.apk" \
-            -print -quit)
+            -print \
+            -quit)
 
           if [ -z "$APK" ]; then
-            echo "Standard debug APK not found."
-            echo "Searching all APK files..."
+            echo "APK not found in standard debug output."
+            echo "Searching entire Android project..."
 
-            APK=$(find "$BUILD_DIR" \
+            APK=$(find "$PROJECT_DIR" \
               -type f \
               -name "*.apk" \
-              -print -quit)
+              -print \
+              -quit)
           fi
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK NOT FOUND."
+            echo "ERROR: APK was not generated."
             echo ""
-            echo "Build output:"
-            find "$BUILD_DIR" -type d -path "*/build/outputs*" -print || true
+            echo "Available build output directories:"
+
+            find "$PROJECT_DIR" \
+              -type d \
+              -path "*/build/outputs*" \
+              -print || true
+
             exit 1
           fi
 
           echo "APK_PATH=$APK" >> "$GITHUB_ENV"
 
-          echo "APK generated successfully:"
+          echo "Generated APK:"
           ls -lh "$APK"
 
       - name: Prepare final APK
@@ -154,22 +260,41 @@ jobs:
           rm -rf "$OUTPUT_DIR"
           mkdir -p "$OUTPUT_DIR"
 
-          FINAL_APK="$OUTPUT_DIR/LiveSignalAssistant-V5.5-PRECISION-EVOLUTION.apk"
+          FINAL_APK="$OUTPUT_DIR/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.apk"
 
           cp "$APK_PATH" "$FINAL_APK"
 
-          if [ ! -s "$FINAL_APK" ]; then
-            echo "ERROR: Final APK is missing or empty."
+          if [ ! -f "$FINAL_APK" ]; then
+            echo "ERROR: Final APK was not copied."
             exit 1
           fi
 
-          echo "Final APK:"
+          if [ ! -s "$FINAL_APK" ]; then
+            echo "ERROR: Final APK is empty."
+            exit 1
+          fi
+
+          echo "Final APK prepared successfully:"
           ls -lh "$FINAL_APK"
 
-      - name: Upload V5.5 PRECISION EVOLUTION APK
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          cd "$GITHUB_WORKSPACE/apk-output"
+
+          sha256sum \
+            LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.apk \
+            > LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.sha256
+
+          echo "APK SHA256:"
+          cat LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.sha256
+
+      - name: Upload TIMEFRAME BRAIN APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5.5-PRECISION-EVOLUTION
-          path: apk-output/LiveSignalAssistant-V5.5-PRECISION-EVOLUTION.apk
+          name: LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN
+          path: |
+            apk-output/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.apk
+            apk-output/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN.sha256
           if-no-files-found: error
           retention-days: 30
