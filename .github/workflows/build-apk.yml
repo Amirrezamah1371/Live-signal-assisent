@@ -1,4 +1,4 @@
-name: Build 5M REGIME FIRST 6.1.0
+name: Build ADAPTIVE HORIZON 6.2.0
 
 on:
   workflow_dispatch:
@@ -28,31 +28,32 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_REGIME_FIRST_610.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_5M_REGIME_FIRST_610.zip not found."
+            echo "ERROR: LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip not found."
+            echo "Repository contents:"
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
           unzip -t "$ZIP_FILE"
-          echo "ZIP OK"
+          echo "SOURCE ZIP OK"
 
       - name: Extract project
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_REGIME_FIRST_610.zip"
-          BUILD_DIR="$GITHUB_WORKSPACE/regime-first-610-build"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_ADAPTIVE_HORIZON_620.zip"
+          BUILD_DIR="$GITHUB_WORKSPACE/adaptive-horizon-620-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
           unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
 
-          echo "Project extracted."
+          echo "Project extracted successfully."
 
       - name: Locate Android project
         id: project
@@ -60,7 +61,7 @@ jobs:
         run: |
           set -e
 
-          BUILD_DIR="$GITHUB_WORKSPACE/regime-first-610-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/adaptive-horizon-620-build"
 
           SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle" | head -1)
 
@@ -76,33 +77,45 @@ jobs:
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "PROJECT: $PROJECT_DIR"
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app module not found."
+            exit 1
+          fi
+
+          echo "Android project:"
+          echo "$PROJECT_DIR"
+
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify critical source
+      - name: Verify critical source files
         shell: bash
         run: |
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
 
-          SIGNAL=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
-          CAPTURE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
+          SIGNAL_ANALYZER=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
+          CAPTURE_SERVICE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
 
-          if [ -z "$SIGNAL" ]; then
+          if [ -z "$SIGNAL_ANALYZER" ]; then
             echo "ERROR: SignalAnalyzer.kt not found."
             exit 1
           fi
 
-          if [ -z "$CAPTURE" ]; then
+          if [ -z "$CAPTURE_SERVICE" ]; then
             echo "ERROR: CaptureService.kt not found."
             exit 1
           fi
 
-          echo "SignalAnalyzer: $SIGNAL"
-          echo "CaptureService: $CAPTURE"
+          echo "SignalAnalyzer:"
+          echo "$SIGNAL_ANALYZER"
 
-      - name: Show app version
+          echo "CaptureService:"
+          echo "$CAPTURE_SERVICE"
+
+          echo "Critical source files OK."
+
+      - name: Show application identity and version
         shell: bash
         run: |
           set -e
@@ -116,22 +129,59 @@ jobs:
           fi
 
           if [ ! -f "$BUILD_FILE" ]; then
-            echo "ERROR: app build.gradle not found."
+            echo "ERROR: app Gradle file not found."
             exit 1
           fi
+
+          echo "========================================"
+          echo "APPLICATION INFORMATION"
+          echo "========================================"
 
           grep -n "applicationId" "$BUILD_FILE" || true
           grep -n "versionCode" "$BUILD_FILE" || true
           grep -n "versionName" "$BUILD_FILE" || true
 
-      - name: Build APK
+      - name: Show Gradle environment
+        shell: bash
+        run: |
+          set -e
+
+          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+          cd "$PROJECT_DIR"
+
+          java -version
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --version
+          else
+            gradle --version
+          fi
+
+      - name: Clean previous outputs
         shell: bash
         run: |
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
 
+          rm -rf "$PROJECT_DIR/app/build"
+          rm -rf "$PROJECT_DIR/build"
+          rm -rf "$GITHUB_WORKSPACE/apk-output"
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+
+      - name: Build ADAPTIVE HORIZON APK
+        shell: bash
+        run: |
+          set -e
+
+          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
           cd "$PROJECT_DIR"
+
+          echo "========================================"
+          echo "BUILDING ADAPTIVE HORIZON 6.2.0"
+          echo "========================================"
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -140,7 +190,7 @@ jobs:
             gradle clean assembleDebug --stacktrace --no-daemon
           fi
 
-      - name: Collect APK
+      - name: Locate generated APK
         shell: bash
         run: |
           set -e
@@ -150,22 +200,25 @@ jobs:
           APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK not generated."
+            echo "ERROR: APK was not generated."
             find "$PROJECT_DIR" -type f -name "*.apk" || true
             exit 1
           fi
 
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0.apk"
 
-          cp "$APK_FILE" \
-          "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk"
+          cp "$APK_FILE" "$OUTPUT_APK"
 
-          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk"
+          echo "========================================"
+          echo "APK BUILD SUCCESSFUL"
+          echo "========================================"
+
+          ls -lh "$OUTPUT_APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-5M-REGIME-FIRST-6.1.0
-          path: apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk
+          name: LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0
+          path: apk-output/LiveSignalAssistant-ADAPTIVE-HORIZON-6.2.0.apk
           if-no-files-found: error
           retention-days: 30
