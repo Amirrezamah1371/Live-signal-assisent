@@ -1,4 +1,4 @@
-name: Build V5.5 TIMEFRAME BRAIN FIXED 5.7.2
+name: Build 5M MULTI-SCALE 5.9.0
 
 on:
   workflow_dispatch:
@@ -23,40 +23,91 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # ============================================================
+      # SOURCE:
+      # This build MUST use the new 5M MULTI-SCALE 5.9.0 source.
+      #
+      # DESIGN GOAL:
+      # - 5-minute signals ONLY.
+      # - 1-minute signals must NOT be generated.
+      # - Keep this as a separate Android application so it can be
+      #   installed beside the previous TIMEFRAME BRAIN version.
+      #
+      # 5M LOGIC:
+      # The analyzer must not judge direction only from the latest
+      # tiny price movement.
+      #
+      # It should compare the current position with several visible
+      # historical scales of the chart:
+      #
+      #   1. Broad visible range / zoomed-out context
+      #   2. Older structural movement
+      #   3. Recent swing structure
+      #   4. Current short movement
+      #
+      # IMPORTANT:
+      # Being near a LOW is not enough by itself to force UP.
+      # The analyzer should look for evidence that price is actually
+      # turning/recovering upward from the lower region.
+      #
+      # LOW REGION + CONFIRMED UPWARD RECOVERY:
+      #   Suppress contradictory DOWN candidates and strengthen UP.
+      #
+      # HIGH REGION + CONFIRMED DOWNWARD REVERSAL:
+      #   Suppress contradictory UP candidates and strengthen DOWN.
+      #
+      # MID-RANGE:
+      #   Preserve the underlying 5-minute analysis rather than
+      #   blindly forcing either direction.
+      #
+      # The objective is structural context + direction + timing,
+      # not a simplistic "low = UP / high = DOWN" rule.
+      # ============================================================
+
       - name: Verify source ZIP
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN_FIXED_572.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_MULTISCALE_590.zip"
 
-          echo "Looking for:"
+          echo "================================================"
+          echo "Looking for 5M MULTI-SCALE 5.9.0 source"
+          echo "================================================"
           echo "$ZIP_FILE"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Source ZIP was not found."
-            echo "Repository root contents:"
+            echo "ERROR: LiveSignalAssistant_5M_MULTISCALE_590.zip was not found."
+            echo ""
+            echo "Repository root:"
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
           echo "Source ZIP found."
+          echo "Testing ZIP integrity..."
+
           unzip -t "$ZIP_FILE"
 
-      - name: Extract project
+          echo "ZIP integrity OK."
+
+      - name: Extract 5.9.0 project
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN_FIXED_572.zip"
-          BUILD_DIR="$GITHUB_WORKSPACE/timeframe-brain-build"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_MULTISCALE_590.zip"
+          BUILD_DIR="$GITHUB_WORKSPACE/multiscale-590-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
           unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
 
-          echo "ZIP extracted successfully."
+          echo "Project extracted."
+          echo ""
+          echo "Extracted structure:"
+          find "$BUILD_DIR" -maxdepth 3 -type f | head -100
 
       - name: Locate Android project
         id: project
@@ -64,7 +115,7 @@ jobs:
         run: |
           set -e
 
-          BUILD_DIR="$GITHUB_WORKSPACE/timeframe-brain-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/multiscale-590-build"
 
           SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle" | head -1)
 
@@ -73,24 +124,24 @@ jobs:
           fi
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: settings.gradle/settings.gradle.kts not found."
-            find "$BUILD_DIR" -maxdepth 5 -type f | sort
+            echo "ERROR: Android settings.gradle/settings.gradle.kts not found."
+            find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android project:"
+          echo "Android project located at:"
           echo "$PROJECT_DIR"
 
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-
           if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module not found."
+            echo "ERROR: Android app module not found."
             exit 1
           fi
 
-      - name: Verify critical source files
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Verify analyzer and application identity
         shell: bash
         run: |
           set -e
@@ -113,22 +164,81 @@ jobs:
           echo "SignalAnalyzer:"
           echo "$SIGNAL_ANALYZER"
 
+          echo ""
           echo "CaptureService:"
           echo "$CAPTURE_SERVICE"
 
-          echo "Checking 5.7.2 fix..."
+          echo ""
+          echo "Checking MULTI-SCALE source markers..."
 
-          if ! grep -q "val horizonContext=" "$SIGNAL_ANALYZER"; then
-            echo "ERROR: horizonContext is missing."
+          if ! grep -q "multiScale" "$SIGNAL_ANALYZER"; then
+            echo "ERROR: MULTI-SCALE analysis marker not found."
             exit 1
           fi
 
-          if ! grep -q "val horizonBonus=" "$SIGNAL_ANALYZER"; then
-            echo "ERROR: horizonBonus is missing."
+          echo "MULTI-SCALE analyzer detected."
+
+          echo ""
+          echo "Checking application ID..."
+
+          BUILD_FILE="$PROJECT_DIR/app/build.gradle.kts"
+
+          if [ ! -f "$BUILD_FILE" ]; then
+            BUILD_FILE="$PROJECT_DIR/app/build.gradle"
+          fi
+
+          if [ ! -f "$BUILD_FILE" ]; then
+            echo "ERROR: app Gradle build file not found."
             exit 1
           fi
 
-          echo "Source verification passed."
+          echo "Using:"
+          echo "$BUILD_FILE"
+
+          grep -n "applicationId" "$BUILD_FILE" || true
+          grep -n "versionCode" "$BUILD_FILE" || true
+          grep -n "versionName" "$BUILD_FILE" || true
+
+          if ! grep -q "5.9.0" "$BUILD_FILE"; then
+            echo "ERROR: Expected version 5.9.0 not found."
+            exit 1
+          fi
+
+          echo ""
+          echo "5.9.0 source identity verified."
+
+      - name: Verify 5-minute-only design
+        shell: bash
+        run: |
+          set -e
+
+          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+          SIGNAL_ANALYZER=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
+
+          echo "================================================"
+          echo "5-MINUTE-ONLY VERIFICATION"
+          echo "================================================"
+
+          echo "Searching analyzer for active 60-second candidate generation..."
+
+          if grep -nE 'evaluateCandidate[^;]*(60)|expiry[^;]*=[[:space:]]*60|intArrayOf[^;]*60|listOf[^;]*60' "$SIGNAL_ANALYZER"; then
+            echo ""
+            echo "ERROR: Possible active 1-minute candidate generation detected."
+            echo "This version must generate 5-minute signals only."
+            exit 1
+          fi
+
+          echo "No obvious active 1-minute candidate generation found."
+
+          echo ""
+          echo "Checking for 300-second / 5-minute horizon..."
+
+          if ! grep -q "300" "$SIGNAL_ANALYZER"; then
+            echo "ERROR: Expected 300-second 5-minute horizon was not found."
+            exit 1
+          fi
+
+          echo "5-minute horizon detected."
 
       - name: Show Gradle information
         shell: bash
@@ -138,18 +248,30 @@ jobs:
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
           cd "$PROJECT_DIR"
 
-          echo "Project directory:"
+          echo "================================================"
+          echo "GRADLE ENVIRONMENT"
+          echo "================================================"
+
+          echo "Project:"
           pwd
 
+          echo ""
+          echo "Java:"
+          java -version
+
+          echo ""
+
           if [ -f "./gradlew" ]; then
+            echo "Gradle wrapper detected."
             chmod +x ./gradlew
             ./gradlew --version
           else
-            echo "Gradle wrapper not found. Using installed Gradle."
+            echo "Gradle wrapper not present."
+            echo "Using GitHub installed Gradle."
             gradle --version
           fi
 
-      - name: Clean old build outputs
+      - name: Clean previous outputs
         shell: bash
         run: |
           set -e
@@ -162,13 +284,19 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-      - name: Build debug APK
+          echo "Old build outputs removed."
+
+      - name: Build 5M MULTI-SCALE APK
         shell: bash
         run: |
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
           cd "$PROJECT_DIR"
+
+          echo "================================================"
+          echo "BUILDING 5M MULTI-SCALE 5.9.0"
+          echo "================================================"
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -188,37 +316,27 @@ jobs:
           APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK was not generated."
+            echo "ERROR: Build finished but APK could not be located."
             find "$PROJECT_DIR" -type f -name "*.apk" || true
             exit 1
           fi
 
-          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk"
+          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-MULTISCALE-5.9.0.apk"
 
           cp "$APK_FILE" "$OUTPUT_APK"
 
-          echo "APK generated successfully:"
+          echo "================================================"
+          echo "APK CREATED SUCCESSFULLY"
+          echo "================================================"
+
           ls -lh "$OUTPUT_APK"
 
           echo "apk_file=$OUTPUT_APK" >> "$GITHUB_OUTPUT"
 
-      - name: Generate SHA256
-        shell: bash
-        run: |
-          set -e
-
-          cd "$GITHUB_WORKSPACE/apk-output"
-
-          sha256sum "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk" > "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256"
-
-          cat "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256"
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2
-          path: |
-            apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk
-            apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256
+          name: LiveSignalAssistant-5M-MULTISCALE-5.9.0
+          path: apk-output/LiveSignalAssistant-5M-MULTISCALE-5.9.0.apk
           if-no-files-found: error
           retention-days: 30
