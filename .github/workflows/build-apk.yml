@@ -1,4 +1,4 @@
-name: Build 5M MULTI-SCALE 5.9.0
+name: Build 5M REGIME FIRST 6.1.0
 
 on:
   workflow_dispatch:
@@ -28,41 +28,31 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_MULTISCALE_590.zip"
-
-          echo "========================================"
-          echo "VERIFYING SOURCE ZIP"
-          echo "========================================"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_REGIME_FIRST_610.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_5M_MULTISCALE_590.zip not found."
-            echo ""
-            echo "Repository files:"
+            echo "ERROR: LiveSignalAssistant_5M_REGIME_FIRST_610.zip not found."
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          echo "Source ZIP found:"
-          echo "$ZIP_FILE"
-
           unzip -t "$ZIP_FILE"
-
-          echo "ZIP integrity OK."
+          echo "ZIP OK"
 
       - name: Extract project
         shell: bash
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_MULTISCALE_590.zip"
-          BUILD_DIR="$GITHUB_WORKSPACE/multiscale-590-build"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_5M_REGIME_FIRST_610.zip"
+          BUILD_DIR="$GITHUB_WORKSPACE/regime-first-610-build"
 
           rm -rf "$BUILD_DIR"
           mkdir -p "$BUILD_DIR"
 
           unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
 
-          echo "Project extracted successfully."
+          echo "Project extracted."
 
       - name: Locate Android project
         id: project
@@ -70,7 +60,7 @@ jobs:
         run: |
           set -e
 
-          BUILD_DIR="$GITHUB_WORKSPACE/multiscale-590-build"
+          BUILD_DIR="$GITHUB_WORKSPACE/regime-first-610-build"
 
           SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle" | head -1)
 
@@ -79,55 +69,40 @@ jobs:
           fi
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: settings.gradle or settings.gradle.kts not found."
-            echo ""
+            echo "ERROR: Android project not found."
             find "$BUILD_DIR" -maxdepth 6 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android project found:"
-          echo "$PROJECT_DIR"
-
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module not found."
-            exit 1
-          fi
-
+          echo "PROJECT: $PROJECT_DIR"
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify critical source files
+      - name: Verify critical source
         shell: bash
         run: |
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
 
-          SIGNAL_ANALYZER=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
-          CAPTURE_SERVICE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
+          SIGNAL=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
+          CAPTURE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
 
-          if [ -z "$SIGNAL_ANALYZER" ]; then
+          if [ -z "$SIGNAL" ]; then
             echo "ERROR: SignalAnalyzer.kt not found."
             exit 1
           fi
 
-          if [ -z "$CAPTURE_SERVICE" ]; then
+          if [ -z "$CAPTURE" ]; then
             echo "ERROR: CaptureService.kt not found."
             exit 1
           fi
 
-          echo "SignalAnalyzer found:"
-          echo "$SIGNAL_ANALYZER"
+          echo "SignalAnalyzer: $SIGNAL"
+          echo "CaptureService: $CAPTURE"
 
-          echo ""
-          echo "CaptureService found:"
-          echo "$CAPTURE_SERVICE"
-
-          echo ""
-          echo "Critical source files OK."
-
-      - name: Verify version
+      - name: Show app version
         shell: bash
         run: |
           set -e
@@ -141,28 +116,15 @@ jobs:
           fi
 
           if [ ! -f "$BUILD_FILE" ]; then
-            echo "ERROR: app Gradle build file not found."
+            echo "ERROR: app build.gradle not found."
             exit 1
           fi
 
-          echo "App build file:"
-          echo "$BUILD_FILE"
-
-          echo ""
-          echo "Application information:"
           grep -n "applicationId" "$BUILD_FILE" || true
           grep -n "versionCode" "$BUILD_FILE" || true
           grep -n "versionName" "$BUILD_FILE" || true
 
-          if ! grep -q "5.9.0" "$BUILD_FILE"; then
-            echo "ERROR: Version 5.9.0 not found in app build file."
-            exit 1
-          fi
-
-          echo ""
-          echo "Version 5.9.0 verified."
-
-      - name: Show Gradle information
+      - name: Build APK
         shell: bash
         run: |
           set -e
@@ -170,57 +132,6 @@ jobs:
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
 
           cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "BUILD ENVIRONMENT"
-          echo "========================================"
-
-          echo "Project directory:"
-          pwd
-
-          echo ""
-          echo "Java version:"
-          java -version
-
-          echo ""
-
-          if [ -f "./gradlew" ]; then
-            echo "Gradle wrapper found."
-            chmod +x ./gradlew
-            ./gradlew --version
-          else
-            echo "Gradle wrapper not found."
-            echo "Using installed Gradle."
-            gradle --version
-          fi
-
-      - name: Clean previous outputs
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
-          rm -rf "$PROJECT_DIR/app/build"
-          rm -rf "$PROJECT_DIR/build"
-          rm -rf "$GITHUB_WORKSPACE/apk-output"
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-
-          echo "Old build outputs removed."
-
-      - name: Build 5M MULTI-SCALE APK
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
-          cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "BUILDING 5M MULTI-SCALE 5.9.0"
-          echo "========================================"
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -229,7 +140,7 @@ jobs:
             gradle clean assembleDebug --stacktrace --no-daemon
           fi
 
-      - name: Locate generated APK
+      - name: Collect APK
         shell: bash
         run: |
           set -e
@@ -239,29 +150,22 @@ jobs:
           APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
 
           if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK was not generated."
-            echo ""
-            echo "Searching project for APK files:"
+            echo "ERROR: APK not generated."
             find "$PROJECT_DIR" -type f -name "*.apk" || true
             exit 1
           fi
 
-          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-MULTISCALE-5.9.0.apk"
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-          cp "$APK_FILE" "$OUTPUT_APK"
+          cp "$APK_FILE" \
+          "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk"
 
-          echo ""
-          echo "========================================"
-          echo "APK BUILD SUCCESSFUL"
-          echo "========================================"
-          echo ""
-
-          ls -lh "$OUTPUT_APK"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-5M-MULTISCALE-5.9.0
-          path: apk-output/LiveSignalAssistant-5M-MULTISCALE-5.9.0.apk
+          name: LiveSignalAssistant-5M-REGIME-FIRST-6.1.0
+          path: apk-output/LiveSignalAssistant-5M-REGIME-FIRST-6.1.0.apk
           if-no-files-found: error
           retention-days: 30
