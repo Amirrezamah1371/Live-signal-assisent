@@ -1,4 +1,4 @@
-name: Build COHERENT ADAPTIVE 6.3.0
+name: Build ONE DECISION MEMORY 7.0
 
 on:
   workflow_dispatch:
@@ -6,9 +6,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -23,167 +27,116 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Verify source ZIP
+      - name: Find 7.0 source ZIP
+        id: source
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip"
+          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_7_0_ONE_DECISION_MEMORY.zip' -print -quit)"
 
-          if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip not found."
-            echo "Repository contents:"
-            ls -la "$GITHUB_WORKSPACE"
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: LiveSignalAssistant_7_0_ONE_DECISION_MEMORY.zip not found."
+            echo "ZIP files currently in repository:"
+            find . -maxdepth 2 -type f -name '*.zip' -print || true
             exit 1
           fi
 
-          unzip -t "$ZIP_FILE"
-          echo "SOURCE ZIP OK"
+          echo "Found source: $ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
-      - name: Extract project
+      - name: Extract source
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_COHERENT_ADAPTIVE_630.zip"
-          BUILD_DIR="$GITHUB_WORKSPACE/coherent-adaptive-630-build"
+          rm -rf "$RUNNER_TEMP/lsa70"
+          mkdir -p "$RUNNER_TEMP/lsa70"
 
-          rm -rf "$BUILD_DIR"
-          mkdir -p "$BUILD_DIR"
+          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa70"
 
-          unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
-
-          echo "Project extracted successfully."
+          echo "Extracted source:"
+          find "$RUNNER_TEMP/lsa70" -maxdepth 3 -type f | head -100
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          BUILD_DIR="$GITHUB_WORKSPACE/coherent-adaptive-630-build"
+          SETTINGS="$(find "$RUNNER_TEMP/lsa70" -type f -name 'settings.gradle' -print -quit)"
 
-          SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle" | head -1)
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            SETTINGS_FILE=$(find "$BUILD_DIR" -type f -name "settings.gradle.kts" | head -1)
+          if [ -z "$SETTINGS" ]; then
+            SETTINGS="$(find "$RUNNER_TEMP/lsa70" -type f -name 'settings.gradle.kts' -print -quit)"
           fi
 
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: settings.gradle/settings.gradle.kts not found."
-            find "$BUILD_DIR" -maxdepth 6 -type f | sort
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Android Gradle project not found."
+            echo "Extracted files:"
+            find "$RUNNER_TEMP/lsa70" -maxdepth 5 -type f -print
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
-
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module not found."
-            exit 1
-          fi
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
           echo "Android project: $PROJECT_DIR"
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Verify source files
+      - name: Inspect project
         shell: bash
+        working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -e
+          set -euo pipefail
 
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+          echo "=== Gradle files ==="
+          find . -maxdepth 3 -type f \( -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'gradle.properties' \) -print
 
-          SIGNAL_ANALYZER=$(find "$PROJECT_DIR/app/src" -type f -name "SignalAnalyzer.kt" | head -1)
-          CAPTURE_SERVICE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
+          echo "=== Android source files ==="
+          find . -type f -name '*.kt' -print | head -100 || true
 
-          if [ -z "$SIGNAL_ANALYZER" ]; then
-            echo "ERROR: SignalAnalyzer.kt not found."
-            exit 1
-          fi
+          echo "=== Manifest ==="
+          find . -type f -name 'AndroidManifest.xml' -print
 
-          if [ -z "$CAPTURE_SERVICE" ]; then
-            echo "ERROR: CaptureService.kt not found."
-            exit 1
-          fi
-
-          echo "SignalAnalyzer: $SIGNAL_ANALYZER"
-          echo "CaptureService: $CAPTURE_SERVICE"
-
-      - name: Show application information
+      - name: Build debug APK
         shell: bash
+        working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
-          BUILD_FILE="$PROJECT_DIR/app/build.gradle.kts"
-
-          if [ ! -f "$BUILD_FILE" ]; then
-            BUILD_FILE="$PROJECT_DIR/app/build.gradle"
-          fi
-
-          if [ ! -f "$BUILD_FILE" ]; then
-            echo "ERROR: app Gradle file not found."
-            exit 1
-          fi
-
-          echo "========================================"
-          echo "APPLICATION INFORMATION"
-          echo "========================================"
-
-          grep -n "applicationId" "$BUILD_FILE" || true
-          grep -n "versionCode" "$BUILD_FILE" || true
-          grep -n "versionName" "$BUILD_FILE" || true
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -e
-
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-          cd "$PROJECT_DIR"
-
-          echo "========================================"
-          echo "BUILDING COHERENT ADAPTIVE 6.3.0"
-          echo "========================================"
+          set -euo pipefail
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             ./gradlew clean assembleDebug --stacktrace --no-daemon
           else
+            echo "Gradle wrapper not found; using installed Gradle."
             gradle clean assembleDebug --stacktrace --no-daemon
           fi
 
       - name: Collect APK
+        id: apk
         shell: bash
+        working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -e
+          set -euo pipefail
 
-          PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
+          APK="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' -print -quit)"
 
-          APK_FILE=$(find "$PROJECT_DIR/app/build/outputs/apk" -type f -name "*.apk" | head -1)
-
-          if [ -z "$APK_FILE" ]; then
-            echo "ERROR: APK not generated."
-            find "$PROJECT_DIR" -type f -name "*.apk" || true
+          if [ -z "$APK" ]; then
+            echo "ERROR: Build finished but debug APK was not found."
+            find . -type f -name '*.apk' -print || true
             exit 1
           fi
 
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          mkdir -p "$GITHUB_WORKSPACE/release"
 
-          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk"
 
-          cp "$APK_FILE" "$OUTPUT_APK"
-
-          echo "========================================"
-          echo "APK BUILD SUCCESSFUL"
-          echo "========================================"
-
-          ls -lh "$OUTPUT_APK"
+          echo "APK created:"
+          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0
-          path: apk-output/LiveSignalAssistant-COHERENT-ADAPTIVE-6.3.0.apk
+          name: LiveSignalAssistant-ONE-DECISION-MEMORY-7.0
+          path: release/LiveSignalAssistant-ONE-DECISION-MEMORY-7.0.apk
           if-no-files-found: error
           retention-days: 30
