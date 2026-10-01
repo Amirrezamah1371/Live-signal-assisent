@@ -1,4 +1,4 @@
-name: Build V5.5 TIMEFRAME BRAIN FIXED
+name: Build V5.5 TIMEFRAME BRAIN FIXED 5.7.2
 
 on:
   workflow_dispatch:
@@ -27,19 +27,20 @@ jobs:
         shell: bash
         run: |
           set -e
-          ZIP_FILE="$GITHUB_WORKSPACE/TIMEFRAME_BRAIN_571_FIXED_FRESH.zip"
+
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN_FIXED_572.zip"
 
           echo "Looking for:"
           echo "$ZIP_FILE"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: TIMEFRAME_BRAIN_571_FIXED_FRESH.zip was not found."
-            echo "Files currently in repository root:"
+            echo "ERROR: Source ZIP was not found."
+            echo "Repository root contents:"
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          echo "Source ZIP found successfully."
+          echo "Source ZIP found."
           unzip -t "$ZIP_FILE"
 
       - name: Extract project
@@ -47,7 +48,7 @@ jobs:
         run: |
           set -e
 
-          ZIP_FILE="$GITHUB_WORKSPACE/TIMEFRAME_BRAIN_571_FIXED_FRESH.zip"
+          ZIP_FILE="$GITHUB_WORKSPACE/LiveSignalAssistant_V5_5_TIMEFRAME_BRAIN_FIXED_572.zip"
           BUILD_DIR="$GITHUB_WORKSPACE/timeframe-brain-build"
 
           rm -rf "$BUILD_DIR"
@@ -56,8 +57,6 @@ jobs:
           unzip -q "$ZIP_FILE" -d "$BUILD_DIR"
 
           echo "ZIP extracted successfully."
-          echo "Extracted files:"
-          find "$BUILD_DIR" -maxdepth 3 -type f | head -100
 
       - name: Locate Android project
         id: project
@@ -74,21 +73,20 @@ jobs:
           fi
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Could not find settings.gradle or settings.gradle.kts."
+            echo "ERROR: settings.gradle/settings.gradle.kts not found."
             find "$BUILD_DIR" -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS_FILE")
 
-          echo "Android project found:"
+          echo "Android project:"
           echo "$PROJECT_DIR"
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
           if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app module was not found."
-            ls -la "$PROJECT_DIR"
+            echo "ERROR: app module not found."
             exit 1
           fi
 
@@ -103,12 +101,12 @@ jobs:
           CAPTURE_SERVICE=$(find "$PROJECT_DIR/app/src" -type f -name "CaptureService.kt" | head -1)
 
           if [ -z "$SIGNAL_ANALYZER" ]; then
-            echo "ERROR: SignalAnalyzer.kt was not found."
+            echo "ERROR: SignalAnalyzer.kt not found."
             exit 1
           fi
 
           if [ -z "$CAPTURE_SERVICE" ]; then
-            echo "ERROR: CaptureService.kt was not found."
+            echo "ERROR: CaptureService.kt not found."
             exit 1
           fi
 
@@ -118,10 +116,10 @@ jobs:
           echo "CaptureService:"
           echo "$CAPTURE_SERVICE"
 
-          echo "Checking horizonContext fix..."
+          echo "Checking 5.7.2 fix..."
 
           if ! grep -q "val horizonContext=" "$SIGNAL_ANALYZER"; then
-            echo "ERROR: horizonContext fix is missing."
+            echo "ERROR: horizonContext is missing."
             exit 1
           fi
 
@@ -130,7 +128,7 @@ jobs:
             exit 1
           fi
 
-          echo "Critical source verification passed."
+          echo "Source verification passed."
 
       - name: Show Gradle information
         shell: bash
@@ -138,14 +136,10 @@ jobs:
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
           cd "$PROJECT_DIR"
 
           echo "Project directory:"
           pwd
-
-          echo "Project contents:"
-          ls -la
 
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
@@ -174,7 +168,6 @@ jobs:
           set -e
 
           PROJECT_DIR="${{ steps.project.outputs.project_dir }}"
-
           cd "$PROJECT_DIR"
 
           if [ -f "./gradlew" ]; then
@@ -200,7 +193,7 @@ jobs:
             exit 1
           fi
 
-          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.apk"
+          OUTPUT_APK="$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk"
 
           cp "$APK_FILE" "$OUTPUT_APK"
 
@@ -216,17 +209,16 @@ jobs:
 
           cd "$GITHUB_WORKSPACE/apk-output"
 
-          sha256sum "LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.apk" > "LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.sha256"
+          sha256sum "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk" > "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256"
 
-          echo "SHA256:"
-          cat "LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.sha256"
+          cat "LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED
+          name: LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2
           path: |
-            apk-output/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.apk
-            apk-output/LiveSignalAssistant-V5.5-TIMEFRAME-BRAIN-FIXED.sha256
+            apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.apk
+            apk-output/LiveSignalAssistant-TIMEFRAME-BRAIN-5.7.2.sha256
           if-no-files-found: error
           retention-days: 30
