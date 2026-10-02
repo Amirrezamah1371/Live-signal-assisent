@@ -1,4 +1,4 @@
-name: Build LSA Photo Review Extractor
+name: Build 71.7.27 R1
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'PhotoExtractor.zip'
+      - 'LiveSignalAssistant_71.7.27_R1.zip'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
           if [ ! -f "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name "sdkmanager" | head -n 1)
           fi
 
           if [ -z "$SDKMANAGER" ]; then
@@ -54,14 +54,14 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find PhotoExtractor ZIP
+      - name: Find R1 ZIP
         id: zip
         shell: bash
         run: |
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "PhotoExtractor.zip" | head -n 1)
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "LiveSignalAssistant_71.7.27_R1.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: PhotoExtractor.zip not found"
+            echo "ERROR: LiveSignalAssistant_71.7.27_R1.zip not found"
             exit 1
           fi
 
@@ -76,25 +76,25 @@ jobs:
       - name: Extract source
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/lsa-photo-extractor"
-          mkdir -p "$RUNNER_TEMP/lsa-photo-extractor"
+          rm -rf "$RUNNER_TEMP/lsa-r1"
+          mkdir -p "$RUNNER_TEMP/lsa-r1"
 
           unzip -q "${{ steps.zip.outputs.zip }}" \
-            -d "$RUNNER_TEMP/lsa-photo-extractor"
+            -d "$RUNNER_TEMP/lsa-r1"
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find "$RUNNER_TEMP/lsa-photo-extractor" -type f -name "settings.gradle" | head -n 1)
+          SETTINGS=$(find "$RUNNER_TEMP/lsa-r1" -type f -name "settings.gradle" | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$RUNNER_TEMP/lsa-photo-extractor" -type f -name "settings.gradle.kts" | head -n 1)
+            SETTINGS=$(find "$RUNNER_TEMP/lsa-r1" -type f -name "settings.gradle.kts" | head -n 1)
           fi
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found"
-            find "$RUNNER_TEMP/lsa-photo-extractor" -maxdepth 5 -type f | sort
+            find "$RUNNER_TEMP/lsa-r1" -maxdepth 5 -type f | sort
             exit 1
           fi
 
@@ -103,7 +103,7 @@ jobs:
           echo "Project directory: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Inspect project
+      - name: Inspect R1 project
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
@@ -112,6 +112,9 @@ jobs:
 
           echo "===== APPLICATION ID ====="
           grep -R "applicationId" app/build.gradle app/build.gradle.kts 2>/dev/null || true
+
+          echo "===== VERSION ====="
+          grep -R "versionName" app/build.gradle app/build.gradle.kts 2>/dev/null || true
 
       - name: Build Debug APK
         shell: bash
@@ -139,15 +142,15 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/output"
 
           cp "$APK" \
-            "$GITHUB_WORKSPACE/output/LSA-Photo-Review-Extractor.apk"
+            "$GITHUB_WORKSPACE/output/LiveSignalAssistant-71.7.27-R1.apk"
 
           echo "===== APK READY ====="
-          ls -lh "$GITHUB_WORKSPACE/output/LSA-Photo-Review-Extractor.apk"
+          ls -lh "$GITHUB_WORKSPACE/output/LiveSignalAssistant-71.7.27-R1.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LSA-Photo-Review-Extractor
-          path: output/LSA-Photo-Review-Extractor.apk
+          name: LiveSignalAssistant-71.7.27-R1
+          path: output/LiveSignalAssistant-71.7.27-R1.apk
           if-no-files-found: error
           retention-days: 30
