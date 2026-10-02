@@ -1,155 +1,144 @@
-name: Build 71.7.27
+name: Build LSA Review Extractor
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-
-permissions:
-  contents: read
+    paths:
+      - 'Extractor.zip'
+      - '.github/workflows/build-apk.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-      - name: Find 71.7.27 source ZIP
-        id: source
+      - name: Find Extractor ZIP
+        id: zip
         shell: bash
         run: |
-          set -euo pipefail
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "Extractor.zip" | head -n 1)
 
-          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_71.7.27.zip' -print -quit)"
-
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: LiveSignalAssistant_71.7.27.zip not found."
-            echo "Available ZIP files:"
-            find . -maxdepth 2 -type f -name '*.zip' -print || true
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Extractor.zip not found"
             exit 1
           fi
 
-          echo "Found source: $ZIP"
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "Found: $ZIP_FILE"
+          echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
 
-      - name: Test ZIP
+      - name: Verify ZIP
         shell: bash
         run: |
-          set -euo pipefail
-          unzip -t "${{ steps.source.outputs.zip }}"
+          unzip -t "${{ steps.zip.outputs.zip }}"
 
       - name: Extract source
         shell: bash
         run: |
-          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/lsa-extractor"
+          mkdir -p "$RUNNER_TEMP/lsa-extractor"
 
-          rm -rf "$RUNNER_TEMP/lsa71727"
-          mkdir -p "$RUNNER_TEMP/lsa71727"
+          unzip -q "${{ steps.zip.outputs.zip }}" \
+            -d "$RUNNER_TEMP/lsa-extractor"
 
-          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa71727"
-
-          echo "Source extracted successfully."
-          find "$RUNNER_TEMP/lsa71727" -maxdepth 3 -type f | head -100
+          echo "Source extracted."
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          set -euo pipefail
-
-          SETTINGS="$(find "$RUNNER_TEMP/lsa71727" -type f -name 'settings.gradle' -print -quit)"
+          SETTINGS=$(find "$RUNNER_TEMP/lsa-extractor" -type f -name "settings.gradle" | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS="$(find "$RUNNER_TEMP/lsa71727" -type f -name 'settings.gradle.kts' -print -quit)"
+            SETTINGS=$(find "$RUNNER_TEMP/lsa-extractor" -type f -name "settings.gradle.kts" | head -n 1)
           fi
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android Gradle project not found."
-            find "$RUNNER_TEMP/lsa71727" -maxdepth 6 -type f -print
+            echo "ERROR: Android project not found"
+            find "$RUNNER_TEMP/lsa-extractor" -maxdepth 4 -type f | sort
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
+          PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "Android project: $PROJECT_DIR"
+          echo "Project directory: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Inspect project
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -euo pipefail
+          echo "===== PROJECT FILES ====="
+          find . -maxdepth 4 -type f | sort
 
-          echo "=== Project files ==="
-          find . -maxdepth 3 -type f -name 'build.gradle' -print
-          find . -maxdepth 3 -type f -name 'build.gradle.kts' -print
-          find . -maxdepth 3 -type f -name 'gradle.properties' -print
-
-          echo "=== Core Kotlin files ==="
-          find . -type f -name 'SignalAnalyzer.kt' -print || true
-          find . -type f -name 'CaptureService.kt' -print || true
-          find . -type f -name 'MemoryStore.kt' -print || true
-          find . -type f -name 'MainActivity.kt' -print || true
-
-          echo "=== Manifest ==="
-          find . -type f -name 'AndroidManifest.xml' -print
-
-          echo "=== Version / Application ID ==="
+          echo "===== APPLICATION ID ====="
           grep -R "applicationId" app/build.gradle app/build.gradle.kts 2>/dev/null || true
-          grep -R "versionName" app/build.gradle app/build.gradle.kts 2>/dev/null || true
 
-      - name: Build debug APK
+      - name: Make Gradle wrapper executable
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -euo pipefail
-
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
-            ./gradlew clean assembleDebug --stacktrace --no-daemon
+          fi
+
+      - name: Build Debug APK
+        shell: bash
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: |
+          if [ -f "./gradlew" ]; then
+            ./gradlew clean assembleDebug --stacktrace
           else
-            echo "Gradle wrapper not found. Using installed Gradle."
-            gradle clean assembleDebug --stacktrace --no-daemon
+            gradle clean assembleDebug --stacktrace
           fi
 
       - name: Collect APK
+        id: apk
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          set -euo pipefail
-
-          APK="$(find . -type f -path '*/build/outputs/apk/debug/*.apk' -print -quit)"
+          APK=$(find . -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Debug APK not found."
-            find . -type f -name '*.apk' -print || true
+            echo "ERROR: APK was not generated"
+            find . -type f -name "*.apk"
             exit 1
           fi
 
-          mkdir -p "$GITHUB_WORKSPACE/release"
+          mkdir -p "$GITHUB_WORKSPACE/output"
 
-          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-71.7.27.apk"
+          cp "$APK" \
+            "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
 
-          echo "=== APK READY ==="
-          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-71.7.27.apk"
+          echo "APK created successfully:"
+          ls -lh "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-71.7.27
-          path: release/LiveSignalAssistant-71.7.27.apk
+          name: LSA-Review-Extractor
+          path: output/LSA-Review-Extractor.apk
           if-no-files-found: error
           retention-days: 30
