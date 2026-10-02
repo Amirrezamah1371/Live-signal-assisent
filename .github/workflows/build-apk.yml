@@ -1,4 +1,4 @@
-name: Build ENGINEERING AUDIT 7.1
+name: Build 71.7.27
 
 on:
   workflow_dispatch:
@@ -27,16 +27,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Find 7.1 source ZIP
+      - name: Find 71.7.27 source ZIP
         id: source
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_7_1_ENGINEERING_AUDIT.zip' -print -quit)"
+          ZIP="$(find . -maxdepth 2 -type f -name 'LiveSignalAssistant_71.7.27.zip' -print -quit)"
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: LiveSignalAssistant_7_1_ENGINEERING_AUDIT.zip not found."
+            echo "ERROR: LiveSignalAssistant_71.7.27.zip not found."
             echo "Available ZIP files:"
             find . -maxdepth 2 -type f -name '*.zip' -print || true
             exit 1
@@ -56,13 +56,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          rm -rf "$RUNNER_TEMP/lsa71"
-          mkdir -p "$RUNNER_TEMP/lsa71"
+          rm -rf "$RUNNER_TEMP/lsa71727"
+          mkdir -p "$RUNNER_TEMP/lsa71727"
 
-          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa71"
+          unzip -q "${{ steps.source.outputs.zip }}" -d "$RUNNER_TEMP/lsa71727"
 
           echo "Source extracted successfully."
-          find "$RUNNER_TEMP/lsa71" -maxdepth 3 -type f | head -100
+          find "$RUNNER_TEMP/lsa71727" -maxdepth 3 -type f | head -100
 
       - name: Locate Android project
         id: project
@@ -70,15 +70,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          SETTINGS="$(find "$RUNNER_TEMP/lsa71" -type f -name 'settings.gradle' -print -quit)"
+          SETTINGS="$(find "$RUNNER_TEMP/lsa71727" -type f -name 'settings.gradle' -print -quit)"
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS="$(find "$RUNNER_TEMP/lsa71" -type f -name 'settings.gradle.kts' -print -quit)"
+            SETTINGS="$(find "$RUNNER_TEMP/lsa71727" -type f -name 'settings.gradle.kts' -print -quit)"
           fi
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android Gradle project not found."
-            find "$RUNNER_TEMP/lsa71" -maxdepth 6 -type f -print
+            find "$RUNNER_TEMP/lsa71727" -maxdepth 6 -type f -print
             exit 1
           fi
 
@@ -93,22 +93,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "=== Gradle files ==="
+          echo "=== Project files ==="
           find . -maxdepth 3 -type f -name 'build.gradle' -print
           find . -maxdepth 3 -type f -name 'build.gradle.kts' -print
           find . -maxdepth 3 -type f -name 'gradle.properties' -print
 
-          echo "=== Kotlin source ==="
-          find . -type f -name '*.kt' -print | head -200 || true
-
-          echo "=== Signal Analyzer ==="
+          echo "=== Core Kotlin files ==="
           find . -type f -name 'SignalAnalyzer.kt' -print || true
-
-          echo "=== Capture Service ==="
           find . -type f -name 'CaptureService.kt' -print || true
+          find . -type f -name 'MemoryStore.kt' -print || true
+          find . -type f -name 'MainActivity.kt' -print || true
 
           echo "=== Manifest ==="
           find . -type f -name 'AndroidManifest.xml' -print
+
+          echo "=== Version / Application ID ==="
+          grep -R "applicationId" app/build.gradle app/build.gradle.kts 2>/dev/null || true
+          grep -R "versionName" app/build.gradle app/build.gradle.kts 2>/dev/null || true
 
       - name: Build debug APK
         shell: bash
@@ -140,15 +141,15 @@ jobs:
 
           mkdir -p "$GITHUB_WORKSPACE/release"
 
-          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ENGINEERING-AUDIT-7.1.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/release/LiveSignalAssistant-71.7.27.apk"
 
           echo "=== APK READY ==="
-          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-ENGINEERING-AUDIT-7.1.apk"
+          ls -lh "$GITHUB_WORKSPACE/release/LiveSignalAssistant-71.7.27.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-ENGINEERING-AUDIT-7.1
-          path: release/LiveSignalAssistant-ENGINEERING-AUDIT-7.1.apk
+          name: LiveSignalAssistant-71.7.27
+          path: release/LiveSignalAssistant-71.7.27.apk
           if-no-files-found: error
           retention-days: 30
