@@ -23,17 +23,22 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK
-        run: |
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Check Android SDK
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls -la "$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Find Extractor ZIP
         id: zip
@@ -59,11 +64,7 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/lsa-extractor"
           mkdir -p "$RUNNER_TEMP/lsa-extractor"
-
-          unzip -q "${{ steps.zip.outputs.zip }}" \
-            -d "$RUNNER_TEMP/lsa-extractor"
-
-          echo "Source extracted."
+          unzip -q "${{ steps.zip.outputs.zip }}" -d "$RUNNER_TEMP/lsa-extractor"
 
       - name: Locate Android project
         id: project
@@ -77,62 +78,51 @@ jobs:
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found"
-            find "$RUNNER_TEMP/lsa-extractor" -maxdepth 4 -type f | sort
+            find "$RUNNER_TEMP/lsa-extractor" -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-
-          echo "Project directory: $PROJECT_DIR"
+          echo "Project: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Inspect project
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          echo "===== PROJECT FILES ====="
+          echo "===== PROJECT ====="
           find . -maxdepth 4 -type f | sort
 
           echo "===== APPLICATION ID ====="
           grep -R "applicationId" app/build.gradle app/build.gradle.kts 2>/dev/null || true
-
-      - name: Make Gradle wrapper executable
-        shell: bash
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-          fi
 
       - name: Build Debug APK
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
             ./gradlew clean assembleDebug --stacktrace
           else
             gradle clean assembleDebug --stacktrace
           fi
 
       - name: Collect APK
-        id: apk
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
           APK=$(find . -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated"
+            echo "ERROR: APK not generated"
             find . -type f -name "*.apk"
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/output"
+          cp "$APK" "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
 
-          cp "$APK" \
-            "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
-
-          echo "APK created successfully:"
+          echo "===== APK READY ====="
           ls -lh "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
 
       - name: Upload APK
