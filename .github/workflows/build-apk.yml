@@ -1,4 +1,4 @@
-name: Build LSA Review Extractor
+name: Build LSA Photo Review Extractor
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     branches:
       - main
     paths:
-      - 'Extractor.zip'
+      - 'PhotoExtractor.zip'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -33,21 +33,35 @@ jobs:
         run: |
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la "$ANDROID_HOME"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          echo "sdkmanager: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find Extractor ZIP
+      - name: Find PhotoExtractor ZIP
         id: zip
         shell: bash
         run: |
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "Extractor.zip" | head -n 1)
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "PhotoExtractor.zip" | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Extractor.zip not found"
+            echo "ERROR: PhotoExtractor.zip not found"
             exit 1
           fi
 
@@ -62,35 +76,38 @@ jobs:
       - name: Extract source
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/lsa-extractor"
-          mkdir -p "$RUNNER_TEMP/lsa-extractor"
-          unzip -q "${{ steps.zip.outputs.zip }}" -d "$RUNNER_TEMP/lsa-extractor"
+          rm -rf "$RUNNER_TEMP/lsa-photo-extractor"
+          mkdir -p "$RUNNER_TEMP/lsa-photo-extractor"
+
+          unzip -q "${{ steps.zip.outputs.zip }}" \
+            -d "$RUNNER_TEMP/lsa-photo-extractor"
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find "$RUNNER_TEMP/lsa-extractor" -type f -name "settings.gradle" | head -n 1)
+          SETTINGS=$(find "$RUNNER_TEMP/lsa-photo-extractor" -type f -name "settings.gradle" | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$RUNNER_TEMP/lsa-extractor" -type f -name "settings.gradle.kts" | head -n 1)
+            SETTINGS=$(find "$RUNNER_TEMP/lsa-photo-extractor" -type f -name "settings.gradle.kts" | head -n 1)
           fi
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: Android project not found"
-            find "$RUNNER_TEMP/lsa-extractor" -maxdepth 5 -type f | sort
+            find "$RUNNER_TEMP/lsa-photo-extractor" -maxdepth 5 -type f | sort
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Project: $PROJECT_DIR"
+
+          echo "Project directory: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Inspect project
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          echo "===== PROJECT ====="
+          echo "===== PROJECT FILES ====="
           find . -maxdepth 4 -type f | sort
 
           echo "===== APPLICATION ID ====="
@@ -114,21 +131,23 @@ jobs:
           APK=$(find . -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK not generated"
+            echo "ERROR: APK was not generated"
             find . -type f -name "*.apk"
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/output"
-          cp "$APK" "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
+
+          cp "$APK" \
+            "$GITHUB_WORKSPACE/output/LSA-Photo-Review-Extractor.apk"
 
           echo "===== APK READY ====="
-          ls -lh "$GITHUB_WORKSPACE/output/LSA-Review-Extractor.apk"
+          ls -lh "$GITHUB_WORKSPACE/output/LSA-Photo-Review-Extractor.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LSA-Review-Extractor
-          path: output/LSA-Review-Extractor.apk
+          name: LSA-Photo-Review-Extractor
+          path: output/LSA-Photo-Review-Extractor.apk
           if-no-files-found: error
           retention-days: 30
