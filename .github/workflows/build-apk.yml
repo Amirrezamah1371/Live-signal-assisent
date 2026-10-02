@@ -1,49 +1,54 @@
-name: Build 27.7.71
+name: Build 71-7-27 APK
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
-    paths:
-      - 'LiveSignalAssistant_27.7.71.zip'
-      - '.github/workflows/build-apk.yml'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: "8.9"
 
-      - name: Check Android SDK
+      - name: Prepare Android SDK
         shell: bash
         run: |
+          set -e
+
           echo "ANDROID_HOME=$ANDROID_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER=""
 
-          if [ ! -f "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name "sdkmanager" | head -n 1)
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           fi
 
           if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
+            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
             exit 1
           fi
+
+          echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
 
@@ -52,72 +57,70 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find 27.7.71 ZIP
-        id: zip
+      - name: Locate source ZIP
+        id: source
         shell: bash
         run: |
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "LiveSignalAssistant_27.7.71.zip" | head -n 1)
+          set -e
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: LiveSignalAssistant_27.7.71.zip not found"
+          ZIP=$(find . -type f -name "71-7-27.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "71-7-27.zip not found"
+            echo "Files in repository:"
+            find . -maxdepth 3 -type f
             exit 1
           fi
 
-          echo "Found: $ZIP_FILE"
-          echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found source: $ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Verify ZIP
         shell: bash
         run: |
-          unzip -t "${{ steps.zip.outputs.zip }}"
+          set -e
+          unzip -t "${{ steps.source.outputs.zip }}"
 
       - name: Extract source
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/lsa-27771"
-          mkdir -p "$RUNNER_TEMP/lsa-27771"
+          set -e
 
-          unzip -q "${{ steps.zip.outputs.zip }}" \
-            -d "$RUNNER_TEMP/lsa-27771"
+          rm -rf "$RUNNER_TEMP/lsa-source"
+          mkdir -p "$RUNNER_TEMP/lsa-source"
+
+          unzip -q "${{ steps.source.outputs.zip }}" \
+            -d "$RUNNER_TEMP/lsa-source"
 
       - name: Locate Android project
         id: project
         shell: bash
         run: |
-          SETTINGS=$(find "$RUNNER_TEMP/lsa-27771" -type f -name "settings.gradle" | head -n 1)
+          set -e
+
+          SETTINGS=$(find "$RUNNER_TEMP/lsa-source" -type f -name "settings.gradle" | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$RUNNER_TEMP/lsa-27771" -type f -name "settings.gradle.kts" | head -n 1)
+            SETTINGS=$(find "$RUNNER_TEMP/lsa-source" -type f -name "settings.gradle.kts" | head -n 1)
           fi
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
-            find "$RUNNER_TEMP/lsa-27771" -maxdepth 5 -type f | sort
+            echo "Android Gradle project not found"
+            find "$RUNNER_TEMP/lsa-source" -maxdepth 5 -type f
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
 
-          echo "Project: $PROJECT_DIR"
+          echo "Project directory: $PROJECT_DIR"
           echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Verify version
-        shell: bash
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          echo "===== APPLICATION ID ====="
-          grep -R "applicationId" app/build.gradle app/build.gradle.kts 2>/dev/null || true
-
-          echo "===== VERSION ====="
-          grep -R "versionName" app/build.gradle app/build.gradle.kts 2>/dev/null || true
-
-          echo "===== SOURCE FILES ====="
-          find app/src/main -type f | sort
 
       - name: Build APK
         shell: bash
         working-directory: ${{ steps.project.outputs.dir }}
         run: |
+          set -e
+
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             ./gradlew clean assembleDebug --stacktrace
@@ -127,28 +130,28 @@ jobs:
 
       - name: Collect APK
         shell: bash
-        working-directory: ${{ steps.project.outputs.dir }}
         run: |
-          APK=$(find . -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1)
+          set -e
+
+          APK=$(find "${{ steps.project.outputs.dir }}" -type f -name "*debug*.apk" | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated"
-            find . -type f -name "*.apk"
+            echo "Debug APK not found"
+            find "${{ steps.project.outputs.dir }}" -type f -name "*.apk"
             exit 1
           fi
 
-          mkdir -p "$GITHUB_WORKSPACE/output"
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-          cp "$APK" \
-            "$GITHUB_WORKSPACE/output/LiveSignalAssistant-27.7.71.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/71-7-27.apk"
 
-          echo "===== APK READY ====="
-          ls -lh "$GITHUB_WORKSPACE/output/LiveSignalAssistant-27.7.71.apk"
+          echo "APK ready:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/71-7-27.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-27.7.71
-          path: output/LiveSignalAssistant-27.7.71.apk
+          name: 71-7-27
+          path: apk-output/71-7-27.apk
           if-no-files-found: error
           retention-days: 30
