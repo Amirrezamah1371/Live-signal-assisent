@@ -1,105 +1,149 @@
-Use the uploaded file:
+name: Build Trader Robot
 
-LiveSignalAssistant_71.7.27_GITHUB_FIX.zip
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-IMPORTANT:
-Do not redesign, rewrite, simplify, or modify the application logic.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-Your task is to upload/extract this project into the GitHub repository and build it successfully.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-Follow these instructions exactly:
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-1. Extract LiveSignalAssistant_71.7.27_GITHUB_FIX.zip.
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
-2. Copy the CONTENTS of the extracted project into the ROOT of the GitHub repository.
-Do NOT create an additional nested folder.
+      - name: Prepare Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-3. Preserve the complete existing project structure and all source files.
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
-4. The GitHub Actions workflow MUST be located exactly at:
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
+          fi
 
-.github/workflows/build-apk.yml
+          if [ -z "${SDKMANAGER:-}" ] || [ ! -x "$SDKMANAGER" ]; then
+            echo "sdkmanager not found"
+            exit 1
+          fi
 
-5. BEFORE committing anything, inspect and validate:
-.github/workflows/build-apk.yml
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
 
-It must be valid GitHub Actions YAML.
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
-6. DO NOT rewrite the workflow unnecessarily.
+      - name: Find source ZIP
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-7. If the workflow has ANY YAML syntax problem, fix the syntax BEFORE committing.
+          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "Trader_Robot_71.7.27_DATA_DRIVEN.zip" | head -n 1)
 
-8. Specifically verify the beginning of the workflow is valid and that the trigger section uses valid GitHub Actions syntax.
+          if [ -z "${ZIP_FILE:-}" ]; then
+            echo "Trader_Robot_71.7.27_DATA_DRIVEN.zip not found"
+            exit 1
+          fi
 
-9. Do not create duplicate workflow files.
+          echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "Using: $ZIP_FILE"
 
-10. Remove/replace any OLD broken build-apk.yml currently present in the repository with the VALID workflow contained in this uploaded project.
+      - name: Verify ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t "${{ steps.source.outputs.zip }}"
 
-11. Make sure GitHub is not still using the previous broken workflow.
+      - name: Extract project
+        shell: bash
+        run: |
+          set -euo pipefail
 
-12. Preserve:
-- SignalAnalyzer
-- CaptureService
-- screen capture
-- overlay
-- UP/DOWN/WAIT logic
-- ONE DECISION cycle
-- 1m/4m/5m expiries
-- signal locking
-- expiry timer
-- WIN/LOSS/VOID
-- memory system
-- screenshots/observations
-- JSON/CSV logging
-- ZIP export
-- existing vision analysis
-- late-entry protection
-- exhaustion protection
+          PROJECT_DIR="$RUNNER_TEMP/trader-robot"
+          rm -rf "$PROJECT_DIR"
+          mkdir -p "$PROJECT_DIR"
 
-13. DO NOT modify the trading/signal algorithm.
+          unzip -q "${{ steps.source.outputs.zip }}" -d "$PROJECT_DIR"
 
-14. DO NOT add:
-- random signals
-- placeholder signals
-- Martingale
-- automatic trading
-- 30s expiry
-- 2m expiry
-- 3m expiry
+      - name: Locate Android project
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
 
-15. Keep the application identity:
+          PROJECT_DIR="$RUNNER_TEMP/trader-robot"
 
-Live Signal Assistant 71.7.27
+          SETTINGS=$(find "$PROJECT_DIR" -type f -name "settings.gradle" | head -n 1)
 
-Keep:
-versionName = "71.7.27"
+          if [ -z "${SETTINGS:-}" ]; then
+            SETTINGS=$(find "$PROJECT_DIR" -type f -name "settings.gradle.kts" | head -n 1)
+          fi
 
-16. Commit the corrected complete project to the main branch.
+          if [ -z "${SETTINGS:-}" ]; then
+            echo "Gradle settings file not found"
+            exit 1
+          fi
 
-17. Trigger the GitHub Actions workflow.
+          ROOT_DIR=$(dirname "$SETTINGS")
 
-18. DO NOT stop after committing.
+          echo "root=$ROOT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Project root: $ROOT_DIR"
 
-19. Check the actual GitHub Actions run.
+      - name: Build APK
+        shell: bash
+        working-directory: ${{ steps.project.outputs.root }}
+        run: |
+          set -euo pipefail
 
-20. If GitHub reports "Invalid workflow file", inspect the EXACT line reported by GitHub, correct that YAML error, commit the correction, and run the workflow again.
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew clean assembleDebug --stacktrace
+          else
+            gradle clean assembleDebug --stacktrace
+          fi
 
-21. If YAML validation succeeds but the Android build fails, inspect the ACTUAL Gradle error and fix only that specific build problem.
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-22. Repeat until GitHub Actions ACTUALLY RUNS and completes successfully.
+          ROOT_DIR="${{ steps.project.outputs.root }}"
+          OUTPUT_DIR="$GITHUB_WORKSPACE/apk-output"
 
-23. Do not report success merely because files were uploaded.
+          rm -rf "$OUTPUT_DIR"
+          mkdir -p "$OUTPUT_DIR"
 
-SUCCESS means:
-- GitHub accepts build-apk.yml
-- The workflow graph/jobs are created
-- The Android build actually runs
-- GitHub Actions finishes GREEN
-- An APK artifact is produced
+          APK=$(find "$ROOT_DIR" -type f -name "*debug*.apk" | head -n 1)
 
-FINAL OUTPUT:
-Provide the successfully generated APK artifact for:
+          if [ -z "${APK:-}" ]; then
+            echo "Debug APK not found"
+            exit 1
+          fi
 
-Live Signal Assistant 71.7.27
+          cp "$APK" "$OUTPUT_DIR/Trader-Robot-71.7.27.apk"
 
-Do not claim completion until the GitHub Actions run is GREEN.
+          ls -lh "$OUTPUT_DIR/Trader-Robot-71.7.27.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Trader-Robot-71.7.27
+          path: apk-output/Trader-Robot-71.7.27.apk
+          if-no-files-found: error
+          retention-days: 30
