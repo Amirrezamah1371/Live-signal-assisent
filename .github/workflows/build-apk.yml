@@ -1,86 +1,97 @@
-Use the attached file:
+STOP. Do not modify any Android source code.
 
-LiveSignalAssistant_71.7.27_FINAL_RESEARCH.zip
+The current GitHub Actions run fails BEFORE any job starts with:
 
-This ZIP is the FINAL RESEARCH source project for our Live Signal Assistant 71.7.27.
+Invalid workflow file
+.github/workflows/build-apk.yml#L3
+You have an error in your yaml syntax on line 3.
 
-Your task is ONLY to build this exact project and produce the installable Android APK.
+This is a GitHub Actions YAML parsing problem, NOT an Android/Gradle/build problem.
 
-IMPORTANT RULES:
+Open the ACTUAL file currently committed at:
 
-1. Do NOT redesign, rewrite, simplify, optimize, refactor, or modify the trading logic.
-2. Do NOT change SignalAnalyzer.kt, CaptureService.kt, memory logic, decision logic, Vision logic, horizon logic, thresholds, scoring, WAIT behavior, UP/DOWN logic, or expiry selection.
-3. Do NOT add any indicators, strategies, filters, Martingale logic, auto-trading, or new trading rules.
-4. Do NOT change the supported expiries. They must remain exactly:
-   - 1 minute
-   - 4 minutes
-   - 5 minutes
-5. Do NOT rename the application/version. Keep version 71.7.27.
-6. Do NOT replace the project with code from an older repository version.
-7. The attached ZIP is the source of truth.
-8. Extract the ZIP and place the actual Android project contents at the repository root.
-9. Do NOT commit the source ZIP itself as the application architecture.
-10. Preserve the complete directory structure and all source files from the ZIP.
+.github/workflows/build-apk.yml
 
-Before building:
+Do not use a local copy and do not infer its contents from the ZIP.
 
-- Verify settings.gradle/settings.gradle.kts.
-- Verify the app module exists.
-- Verify build.gradle/build.gradle.kts files.
-- Verify AndroidManifest.xml.
-- Verify all Kotlin source files are present.
-- Verify Gradle/JDK/Android SDK compatibility.
-- Verify the GitHub Actions workflow is valid YAML.
-- Do not wrap YAML in Markdown code fences.
-- Save workflow as plain UTF-8 text with normal LF line endings.
+First inspect the raw committed file, especially lines 1-10.
 
-Then build the project.
+Then completely replace ONLY this workflow file with the following exact raw text:
 
-Use JDK 17.
+name: Build Android APK
 
-If the project contains a Gradle wrapper, use:
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-chmod +x ./gradlew
-./gradlew clean assembleDebug --stacktrace
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-If there is no Gradle wrapper, use a compatible Gradle installation and run:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-gradle clean assembleDebug --stacktrace
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-Do not claim success until GitHub Actions actually completes successfully.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-If the build fails:
+      - name: Build debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
 
-- Read the EXACT GitHub Actions error.
-- Fix ONLY the technical/build issue responsible for that error.
-- Do not modify trading behavior to solve a build problem.
-- Run the build again.
-- Repeat until the workflow is GREEN.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-FINAL-RESEARCH
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
-If the workflow itself is rejected as invalid:
+CRITICAL REQUIREMENTS:
 
-- Inspect the actual .github/workflows/build-apk.yml committed to GitHub.
-- Fix the exact YAML/parser problem.
-- Do not invent a different project structure.
-- Do not create a workflow that searches for the ZIP inside the repository.
-- The extracted Android project must already be at repository root.
+- Modify ONLY .github/workflows/build-apk.yml.
+- Do NOT touch any Kotlin/Android/trading source code.
+- Do NOT put Markdown ``` fences into the YAML file.
+- Save it as plain UTF-8 WITHOUT BOM.
+- Use LF line endings.
+- Use spaces only, NEVER tabs.
+- Keep the key exactly as "on": including the quotation marks.
+- Do not add comments or explanatory text to the YAML.
+- Do not redesign the workflow.
+- Do not create another workflow file.
 
-After a successful build:
+Before committing, print the exact raw contents of .github/workflows/build-apk.yml with line numbers so we can verify that line 3 is exactly:
 
-- Locate the generated debug APK.
-- Upload it using actions/upload-artifact@v4.
-- Artifact name:
+"on":
 
-LiveSignalAssistant-71.7.27-FINAL-RESEARCH
+Then commit the change to main.
 
-Before finishing, verify that the APK artifact actually exists.
+After committing, trigger GitHub Actions.
 
-Finally report ONLY:
+IMPORTANT:
+Do not claim that the problem is fixed merely because the file was committed.
 
-1. Build status: SUCCESS or FAILURE
-2. Commit SHA used for the successful build
-3. APK artifact name
-4. APK path
-5. Any build-only files that had to be modified
+Check the ACTUAL GitHub Actions run.
 
-Do not make additional changes after a successful build.
+Success for this stage means GitHub accepts the workflow and displays the build job/steps instead of:
+
+Invalid workflow file ... #L3
+
+If GitHub STILL reports an invalid workflow:
+STOP.
+Do not rewrite anything else.
+Return:
+1. Exact commit SHA
+2. Exact raw contents of build-apk.yml with line numbers
+3. Exact GitHub annotation/error
+4. Exact bytes/encoding information for the first 10 lines if available.
+
+If GitHub accepts the workflow but a build step later fails, report that NEW build error exactly. Do not modify Android source code automatically.
