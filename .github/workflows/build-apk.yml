@@ -1,155 +1,670 @@
-name: Build Trader Robot 71.7.27 FIXED
+Use the uploaded file:
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+LiveSignalAssistant_71.7.27_NEW.zip
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+Build the Android application directly from this source.
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
 
-      - name: Prepare Android SDK
-        shell: bash
-        run: |
-          set -e
+PROJECT NAME:
+Live Signal Assistant 71.7.27
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          SDKMANAGER=""
+VERSION:
+71.7.27
 
-          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          fi
 
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
-          fi
+This source is based on our previously working Live Signal Assistant architecture and must remain the foundation of the new build.
 
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found"
-            exit 1
-          fi
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+DO NOT rebuild the trading-analysis engine from scratch.
+DO NOT replace working logic with simplified, random, placeholder, or experimental logic.
+DO NOT remove working features merely to make the project compile.
 
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
 
-      - name: Locate source ZIP
-        id: source
-        shell: bash
-        run: |
-          set -e
+PRIMARY OBJECTIVE:
+Improve signal quality and entry timing while preserving the proven architecture.
 
-          ZIP=$(find . -type f -name "Trader_Robot_71.7.27_FIXED.zip" | head -n 1)
 
-          if [ -z "$ZIP" ]; then
-            echo "Trader_Robot_71.7.27_FIXED.zip not found"
-            echo "Repository files:"
-            find . -maxdepth 3 -type f
-            exit 1
-          fi
+Accuracy is more important than signal frequency.
 
-          echo "Found source: $ZIP"
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
-      - name: Verify source ZIP
-        shell: bash
-        run: |
-          set -e
-          unzip -t "${{ steps.source.outputs.zip }}"
+WAIT is the default whenever the evidence is not strong enough.
 
-      - name: Extract source
-        shell: bash
-        run: |
-          set -e
 
-          rm -rf "$RUNNER_TEMP/trader-robot"
-          mkdir -p "$RUNNER_TEMP/trader-robot"
+==================================================
+CORE DECISION SYSTEM
 
-          unzip -q "${{ steps.source.outputs.zip }}" \
-            -d "$RUNNER_TEMP/trader-robot"
 
-      - name: Locate Android project
-        id: project
-        shell: bash
-        run: |
-          set -e
+Maintain ONE DECISION per analysis cycle.
 
-          SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle" | head -n 1)
 
-          if [ -z "$SETTINGS" ]; then
-            SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle.kts" | head -n 1)
-          fi
+Each cycle should observe and analyze the chart for approximately 60 seconds.
 
-          if [ -z "$SETTINGS" ]; then
-            echo "Android Gradle project not found"
-            find "$RUNNER_TEMP/trader-robot" -maxdepth 5 -type f
-            exit 1
-          fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+During the cycle continuously collect observations, but DO NOT issue multiple signals.
 
-          echo "Project directory: $PROJECT_DIR"
-          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Build APK
-        shell: bash
-        working-directory: ${{ steps.project.outputs.dir }}
-        run: |
-          set -e
+At the end of the cycle output exactly ONE:
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug --stacktrace
-          else
-            gradle clean assembleDebug --stacktrace
-          fi
 
-      - name: Collect APK
-        shell: bash
-        run: |
-          set -e
+UP
+DOWN
+WAIT
 
-          APK=$(find "${{ steps.project.outputs.dir }}" -type f -name "*debug*.apk" | head -n 1)
 
-          if [ -z "$APK" ]; then
-            echo "Debug APK not found"
-            find "${{ steps.project.outputs.dir }}" -type f -name "*.apk"
-            exit 1
-          fi
+Then start a new cycle.
 
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-          cp "$APK" \
-            "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
+Never force UP or DOWN merely because the cycle has ended.
 
-          echo "APK ready:"
-          ls -lh "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Trader-Robot-71.7.27
-          path: apk-output/Trader-Robot-71.7.27.apk
-          if-no-files-found: error
-          retention-days: 30
+WAIT is a correct and desirable result when evidence is insufficient.
+
+
+==================================================
+PRESERVE EXISTING WORKING COMPONENTS
+
+
+Preserve:
+
+
+
+
+CaptureService
+
+
+SignalAnalyzer
+
+
+screen capture
+
+
+floating overlay
+
+
+price-trace/vision analysis
+
+
+market-structure analysis
+
+
+trend analysis
+
+
+momentum analysis
+
+
+regime detection
+
+
+entry-quality analysis
+
+
+UP/DOWN/WAIT system
+
+
+signal locking
+
+
+expiry countdown
+
+
+WIN/LOSS/VOID controls
+
+
+session memory
+
+
+observation logging
+
+
+screenshot/image memory
+
+
+JSON/CSV logging
+
+
+ZIP memory export
+
+
+trade-execution detection where already implemented
+
+
+
+
+Do not rewrite these components unnecessarily.
+
+
+==================================================
+VISION QUALITY
+
+
+A major issue identified during previous memory analysis was possible confusion between the real chart/price trace and platform UI graphics.
+
+
+The analyzer must distinguish actual price movement from:
+
+
+
+
+trade lines
+
+
+entry lines
+
+
+horizontal UI lines
+
+
+buttons
+
+
+labels
+
+
+overlay elements
+
+
+countdown elements
+
+
+transaction markers
+
+
+other platform graphics
+
+
+
+
+A single detected graphical line must never be treated as sufficient evidence of price direction.
+
+
+Use temporal consistency across observations.
+
+
+If visual extraction becomes unreliable or contradictory:
+
+
+WAIT.
+
+
+Never fabricate missing market information.
+
+
+==================================================
+ENTRY QUALITY
+
+
+Improve protection against late entries.
+
+
+Avoid issuing a continuation signal after most of the directional move has already happened.
+
+
+Detect:
+
+
+
+
+extended impulses
+
+
+late continuation
+
+
+momentum deceleration
+
+
+exhaustion
+
+
+abnormal recent displacement
+
+
+poor risk/reward entry location
+
+
+unstable reversals
+
+
+conflicting structure
+
+
+
+
+If a strong move has already occurred and the proposed entry would chase that move:
+
+
+WAIT.
+
+
+Do NOT automatically reverse direction just because the previous impulse appears exhausted.
+
+
+==================================================
+DIRECTION BALANCE
+
+
+Eliminate artificial directional bias.
+
+
+Do not prefer DOWN simply because previous observations were bearish.
+
+
+Do not prefer UP simply because previous observations were bullish.
+
+
+UP and DOWN should require comparable evidence.
+
+
+Direction must emerge from current observed market structure.
+
+
+==================================================
+MULTI-OBSERVATION REASONING
+
+
+Do not make the final decision from a single screenshot.
+
+
+Use observations collected throughout the cycle.
+
+
+Recent observations may receive more relevance, but one late frame must not completely override the entire cycle without strong structural evidence.
+
+
+Evaluate:
+
+
+
+
+persistence
+
+
+acceleration/deceleration
+
+
+structure
+
+
+direction consistency
+
+
+reversals
+
+
+noise
+
+
+impulse maturity
+
+
+entry timing
+
+
+
+
+The objective is to understand what the market is doing NOW and whether a new entry still has enough remaining movement.
+
+
+==================================================
+SUPPORTED EXPIRIES
+
+
+ONLY use:
+
+
+1 minute
+4 minutes
+5 minutes
+
+
+Do NOT use:
+
+
+30 seconds
+2 minutes
+3 minutes
+
+
+Select expiry according to setup structure.
+
+
+Short immediate setups may use 1m.
+
+
+More developed structural setups may use 4m or 5m.
+
+
+Do not choose expiry randomly.
+
+
+==================================================
+SCORE SYSTEM
+
+
+The internal SCORE is diagnostic.
+
+
+It is NOT a calibrated probability of winning.
+
+
+Display:
+
+
+SCORE: XX
+
+
+Never display:
+
+
+XX%
+Confidence XX%
+Win Probability XX%
+
+
+Do not interpret SCORE 96 as a 96% probability of winning.
+
+
+Do not artificially saturate most accepted signals at the same score.
+
+
+The score should meaningfully reflect differences in evidence quality.
+
+
+==================================================
+WAIT-FIRST FILTERING
+
+
+Prefer WAIT when:
+
+
+
+
+structure is unclear
+
+
+direction conflicts
+
+
+momentum is weak
+
+
+momentum is exhausted
+
+
+entry is late
+
+
+price already made a large impulse
+
+
+visual quality is unreliable
+
+
+chart/UI contamination is suspected
+
+
+evidence is insufficient
+
+
+expiry selection is uncertain
+
+
+UP and DOWN evidence are too close
+
+
+
+
+There is NO signal quota.
+
+
+There is NO requirement to generate a certain number of signals per hour.
+
+
+==================================================
+MEMORY
+
+
+Keep detailed memory for later independent analysis.
+
+
+For each cycle store, where available:
+
+
+timestamp
+cycle ID
+pair
+timeframe
+observations
+visual quality
+price/structure features
+trend
+momentum
+regime
+UP evidence
+DOWN evidence
+entry quality
+impulse state
+exhaustion state
+late-entry state
+rejection reasons
+WAIT reason
+final decision
+expiry
+SCORE
+signal timestamp
+lock/execution timestamp
+execution status
+WIN/LOSS/VOID result
+associated screenshots/images
+
+
+Memory must remain exportable as ZIP with JSON/CSV and associated images.
+
+
+==================================================
+LEARNING SAFETY / ANTI-OVERFITTING
+
+
+Do NOT modify trading rules simply because a few previous trades won.
+
+
+Do NOT optimize specifically for historical WIN examples.
+
+
+Do NOT memorize historical screenshots as trading rules.
+
+
+Historical memory is evaluation data.
+
+
+Future performance must be evaluated using new unseen DEMO sessions.
+
+
+Keep every algorithmic modification:
+
+
+conservative
+explainable
+measurable
+reversible
+
+
+==================================================
+SIGNAL LOCK
+
+
+Preserve the existing manual signal-lock workflow.
+
+
+When UP/DOWN is generated, the user decides whether to execute it.
+
+
+Do not automatically place the trade.
+
+
+When the signal is locked/executed, start the appropriate expiry workflow according to the existing architecture.
+
+
+At expiry provide:
+
+
+WIN
+LOSS
+VOID
+
+
+Record the result and timestamp.
+
+
+==================================================
+NO AUTOMATIC TRADING
+
+
+The application is an analysis assistant.
+
+
+NEVER:
+
+
+automatically press CALL/PUT
+automatically place trades
+change trade amount
+implement Martingale
+double stake after LOSS
+interact with withdrawals
+interact with account balances
+
+
+==================================================
+VERSION IDENTITY
+
+
+Keep:
+
+
+Live Signal Assistant 71.7.27
+
+
+versionName:
+71.7.27
+
+
+Do NOT rename the application to 72.0.0.
+
+
+Do not change the requested version identity.
+
+
+==================================================
+BUILD
+
+
+Inspect the complete project before editing.
+
+
+Preserve all working code.
+
+
+Fix actual compilation/runtime problems correctly.
+
+
+Do not delete features to bypass compilation errors.
+
+
+Verify:
+
+
+Gradle configuration
+Android Manifest
+foreground service
+MediaProjection/screen capture
+overlay permission
+CaptureService
+SignalAnalyzer
+memory system
+export system
+signal lock
+expiry timer
+WIN/LOSS/VOID controls
+
+
+Use the existing GitHub Actions build workflow where possible.
+
+
+Build a complete installable DEBUG APK.
+
+
+The APK must contain the real analyzer.
+
+
+No placeholder signals.
+No random UP/DOWN generation.
+No fake market data.
+No fabricated results.
+
+
+==================================================
+TEST MODE
+
+
+This version will initially be tested ONLY on DEMO.
+
+
+Do not claim any guaranteed win rate.
+
+
+Collect enough new out-of-sample observations and executed trades before evaluating performance.
+
+
+The exported memory must allow later comparison of:
+
+
+cycles
+WAITs
+signals
+executed signals
+UP/DOWN distribution
+1m/4m/5m distribution
+WIN
+LOSS
+VOID
+results by expiry
+results by direction
+results by regime
+late-entry rejection
+exhaustion rejection
+visual-quality rejection
+
+
+==================================================
+FINAL INSTRUCTION
+
+
+Build LiveSignalAssistant_71.7.27_NEW.zip as:
+
+
+LIVE SIGNAL ASSISTANT 71.7.27
+
+
+Preserve the working 71.7.27 architecture.
+
+
+Improve conservatism around late entries, exhaustion and unreliable visual evidence without destroying the existing signal engine.
+
+
+WAIT when evidence is insufficient.
+
+
+Generate exactly ONE decision per cycle.
+
+
+Maintain full memory/export capability.
+
+
+Produce the final installable APK for DEMO testing.
+
+
