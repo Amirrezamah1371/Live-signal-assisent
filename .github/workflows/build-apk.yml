@@ -1,4 +1,4 @@
-name: Build Trader Robot
+name: Build Trader Robot 71.7.27 DATA DRIVEN
 
 on:
   push:
@@ -14,13 +14,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Gradle 8.9
+      - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
@@ -30,16 +30,28 @@ jobs:
         run: |
           set -euo pipefail
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1)
+          SDKMANAGER=""
+
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           fi
 
-          if [ -z "${SDKMANAGER:-}" ] || [ ! -x "$SDKMANAGER" ]; then
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1 || true)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1 || true)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager not found"
             exit 1
           fi
+
+          echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
 
@@ -48,38 +60,40 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Find source ZIP
+      - name: Locate source ZIP
         id: source
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP_FILE=$(find "$GITHUB_WORKSPACE" -type f -name "Trader_Robot_71.7.27_DATA_DRIVEN.zip" | head -n 1)
+          ZIP=$(find "$GITHUB_WORKSPACE" -type f -name "Trader_Robot_71.7.27_DATA_DRIVEN.zip" | head -n 1 || true)
 
-          if [ -z "${ZIP_FILE:-}" ]; then
-            echo "Trader_Robot_71.7.27_DATA_DRIVEN.zip not found"
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: Trader_Robot_71.7.27_DATA_DRIVEN.zip not found"
             exit 1
           fi
 
-          echo "zip=$ZIP_FILE" >> "$GITHUB_OUTPUT"
-          echo "Using: $ZIP_FILE"
+          echo "Found source:"
+          echo "$ZIP"
 
-      - name: Verify ZIP
+          unzip -t "$ZIP"
+
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Extract source
         shell: bash
         run: |
           set -euo pipefail
-          unzip -t "${{ steps.source.outputs.zip }}"
 
-      - name: Extract project
-        shell: bash
-        run: |
-          set -euo pipefail
+          DEST="$RUNNER_TEMP/trader-robot"
 
-          PROJECT_DIR="$RUNNER_TEMP/trader-robot"
-          rm -rf "$PROJECT_DIR"
-          mkdir -p "$PROJECT_DIR"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
 
-          unzip -q "${{ steps.source.outputs.zip }}" -d "$PROJECT_DIR"
+          unzip -q "${{ steps.source.outputs.zip }}" -d "$DEST"
+
+          echo "Source extracted to:"
+          echo "$DEST"
 
       - name: Locate Android project
         id: project
@@ -87,23 +101,32 @@ jobs:
         run: |
           set -euo pipefail
 
-          PROJECT_DIR="$RUNNER_TEMP/trader-robot"
+          ROOT=""
 
-          SETTINGS=$(find "$PROJECT_DIR" -type f -name "settings.gradle" | head -n 1)
+          SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle" | head -n 1 || true)
 
-          if [ -z "${SETTINGS:-}" ]; then
-            SETTINGS=$(find "$PROJECT_DIR" -type f -name "settings.gradle.kts" | head -n 1)
+          if [ -n "$SETTINGS" ]; then
+            ROOT=$(dirname "$SETTINGS")
           fi
 
-          if [ -z "${SETTINGS:-}" ]; then
-            echo "Gradle settings file not found"
+          if [ -z "$ROOT" ]; then
+            SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle.kts" | head -n 1 || true)
+
+            if [ -n "$SETTINGS" ]; then
+              ROOT=$(dirname "$SETTINGS")
+            fi
+          fi
+
+          if [ -z "$ROOT" ]; then
+            echo "ERROR: Android project root not found"
+            find "$RUNNER_TEMP/trader-robot" -maxdepth 4 -type f | sort
             exit 1
           fi
 
-          ROOT_DIR=$(dirname "$SETTINGS")
+          echo "Android project root:"
+          echo "$ROOT"
 
-          echo "root=$ROOT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Project root: $ROOT_DIR"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
 
       - name: Build APK
         shell: bash
@@ -123,22 +146,19 @@ jobs:
         run: |
           set -euo pipefail
 
-          ROOT_DIR="${{ steps.project.outputs.root }}"
-          OUTPUT_DIR="$GITHUB_WORKSPACE/apk-output"
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-          rm -rf "$OUTPUT_DIR"
-          mkdir -p "$OUTPUT_DIR"
+          APK=$(find "${{ steps.project.outputs.root }}" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1 || true)
 
-          APK=$(find "$ROOT_DIR" -type f -name "*debug*.apk" | head -n 1)
-
-          if [ -z "${APK:-}" ]; then
-            echo "Debug APK not found"
+          if [ -z "$APK" ]; then
+            echo "ERROR: Debug APK not found"
             exit 1
           fi
 
-          cp "$APK" "$OUTPUT_DIR/Trader-Robot-71.7.27.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
 
-          ls -lh "$OUTPUT_DIR/Trader-Robot-71.7.27.apk"
+          echo "APK created:"
+          ls -lh "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
