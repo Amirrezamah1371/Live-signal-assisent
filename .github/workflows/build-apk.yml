@@ -1,83 +1,128 @@
-The GitHub Actions workflow is still failing BEFORE execution.
-
-Current failed commit:
-5b97352
-
-Exact GitHub error:
+The repository is STILL failing with:
 
 Invalid workflow file
 .github/workflows/build-apk.yml#L3
 You have an error in your yaml syntax on line 3
 
-Your task is to FIX THIS YOURSELF completely.
+STOP trying to repair or reuse the existing workflow.
 
-Do NOT ask me to inspect files.
-Do NOT ask me to copy GitHub content.
-Do NOT ask me for screenshots.
-Do NOT stop after editing the file.
-You have access to the repository, so inspect the actual committed repository yourself.
+DO NOT modify ANY Android/Kotlin source files.
 
-IMPORTANT:
+Your only task now is to prove that GitHub Actions can parse a newly created workflow.
 
-The Android trading application source is NOT the problem.
-Do NOT modify ANY Android/Kotlin/trading logic.
-
-Do not modify:
-- SignalAnalyzer.kt
-- CaptureService.kt
-- Vision logic
-- UP/DOWN/WAIT logic
-- Horizon logic
-- 1m/4m/5m logic
-- Memory system
-- Trading rules
-- Thresholds
-- Scores
-- Confidence/calibration logic
-
-ONLY diagnose and repair the GitHub Actions/build infrastructure.
-
-STEP 1 — INSPECT THE REAL FILE
-
-Open the ACTUAL committed file at commit 5b97352:
+1. Delete this file completely:
 
 .github/workflows/build-apk.yml
 
-Inspect its RAW contents.
+2. Commit that deletion if necessary.
 
-Check specifically for:
-
-- UTF-8 BOM
-- invisible Unicode characters
-- non-breaking spaces
-- zero-width characters
-- smart quotes
-- Markdown code fences
-- tabs
-- CRLF/LF corruption
-- malformed indentation
-- duplicate YAML keys
-- characters before "name:"
-- malformed "on" key
-- incorrect file encoding
-- accidental text inserted by previous edits
-
-Do NOT assume the displayed text is identical to the raw file.
-
-STEP 2 — DELETE THE BROKEN WORKFLOW FILE COMPLETELY
-
-Delete:
+3. Create a completely NEW plain-text file at:
 
 .github/workflows/build-apk.yml
 
-Do not edit it in place.
+Do NOT copy the previous workflow.
+Do NOT copy the workflow from the ZIP.
+Do NOT generate it from Markdown.
+Do NOT use a template.
 
-STEP 3 — CREATE A BRAND-NEW FILE
+Write EXACTLY these lines into the file:
 
-Create a NEW file at exactly:
+name: Workflow Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "WORKFLOW_OK"
 
-.github/workflows/build-apk.yml
+Nothing else may exist in this file.
 
-It must be plain UTF-8 WITHOUT BOM.
-Use LF line endings.
-Use spaces only
+STRICT FILE REQUIREMENTS:
+
+- UTF-8 without BOM
+- LF line endings only
+- ASCII characters only
+- spaces only
+- no tabs
+- no comments
+- no Markdown code fences
+- no blank lines before "name:"
+- no invisible Unicode characters
+- no additional YAML
+- no Android build commands
+- no Gradle commands
+
+Before committing, inspect the RAW BYTES of the newly created file.
+
+The exact complete file must be:
+
+name: Workflow Test\n
+on: [push]\n
+jobs:\n
+  test:\n
+    runs-on: ubuntu-latest\n
+    steps:\n
+      - run: echo "WORKFLOW_OK"\n
+
+Verify that the first bytes are ASCII:
+
+6e 61 6d 65 3a
+
+and that there is NO UTF-8 BOM:
+
+ef bb bf
+
+Commit and push this new file to main.
+
+THEN inspect the ACTUAL GitHub Actions run.
+
+SUCCESS AT THIS STAGE MEANS:
+
+GitHub no longer displays:
+
+Invalid workflow file
+
+and a job named "test" actually runs and the step prints:
+
+WORKFLOW_OK
+
+DO NOT proceed to Android building until this exact minimal workflow has successfully executed.
+
+If this minimal workflow STILL fails on line 3:
+
+DO NOT edit the YAML again.
+
+Instead investigate the ACTUAL repository and determine why the bytes committed to GitHub differ from the bytes you created.
+
+Inspect:
+
+- the exact blob stored in the Git commit
+- git show HEAD:.github/workflows/build-apk.yml
+- raw byte/hex representation
+- file encoding
+- .gitattributes
+- any automation modifying workflow files
+- whether the failed run belongs to the newest commit
+- whether another build-apk.yml exists
+- whether your commit actually reached main
+
+Compare the Git blob byte-for-byte against the exact 7-line workflow above.
+
+DO NOT STOP until either:
+
+A) the minimal workflow runs successfully and prints WORKFLOW_OK
+
+or
+
+B) you identify and report the exact repository-level reason GitHub is receiving different content.
+
+Do not touch the trading application under any circumstances.
+
+When finished report ONLY:
+
+1. Commit SHA
+2. Exact contents returned by:
+   git show HEAD:.github/workflows/build-apk.yml
+3. Whether GitHub parsed the workflow
+4. Whether WORKFLOW_OK executed
+5. If it failed, the exact root cause
