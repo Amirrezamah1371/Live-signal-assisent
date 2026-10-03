@@ -1,4 +1,4 @@
-name: Build Trader Robot 71.7.27
+name: Build Trader Robot 71.7.27 FIXED
 
 on:
   push:
@@ -60,10 +60,11 @@ jobs:
         run: |
           set -e
 
-          ZIP=$(find . -type f -name "Trader_Robot_71.7.27.zip" | head -n 1)
+          ZIP=$(find . -type f -name "Trader_Robot_71.7.27_FIXED.zip" | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "Trader_Robot_71.7.27.zip not found"
+            echo "Trader_Robot_71.7.27_FIXED.zip not found"
+            echo "Repository files:"
             find . -maxdepth 3 -type f
             exit 1
           fi
@@ -142,6 +143,7 @@ jobs:
           cp "$APK" \
             "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
 
+          echo "APK ready:"
           ls -lh "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
 
       - name: Upload APK
