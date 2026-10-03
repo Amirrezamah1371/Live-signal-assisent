@@ -1,91 +1,119 @@
-name: Build Live Signal Assistant 71.7.27 1M
+Use ONLY the attached source ZIP:
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+LiveSignalAssistant_71.7.27_1M_SHOCK_BRAIN.zip
 
-permissions:
-  contents: read
+TASK:
+Build the Android application contained in this ZIP and return ONE complete BUILD-READY source ZIP.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+CRITICAL RULES:
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+1. DO NOT paste this prompt, these instructions, explanations, comments, or any natural-language text into:
+   - .github/workflows/build-apk.yml
+   - any YAML/YML file
+   - Gradle files
+   - Kotlin/Java source files
+   - AndroidManifest.xml
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+2. DO NOT replace a valid GitHub Actions workflow with this prompt.
 
-      - name: Find and extract source ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
-          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*1M_PRECISE*.zip' -print -quit)"
+3. The file:
+   .github/workflows/build-apk.yml
+   MUST contain ONLY valid GitHub Actions YAML.
 
-          if [ -z "$ZIP" ]; then
-            echo "::error::1M_PRECISE source ZIP not found"
-            exit 1
-          fi
+4. Before returning the project, explicitly validate that build-apk.yml begins with valid YAML such as:
+   name:
+   on:
+   permissions:
+   jobs:
+   It MUST NOT begin with "Use ONLY", "TASK", "IMPORTANT", "CRITICAL", or any prose instruction.
 
-          DEST="$RUNNER_TEMP/live-signal-source"
-          rm -rf "$DEST"
-          mkdir -p "$DEST"
-          unzip -q "$ZIP" -d "$DEST"
+5. DO NOT redesign or recreate the application.
 
-          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
+6. DO NOT modify the existing 1-minute trading logic unless required to fix an actual compilation error.
 
-          if [ -z "$SETTINGS" ]; then
-            echo "::error::Gradle settings file not found inside ZIP"
-            exit 1
-          fi
+7. Preserve the existing:
+   - 1-minute-only architecture
+   - 60-second expiry
+   - high-resolution timer
+   - UP / DOWN / WAIT engine
+   - Direction Engine
+   - Shock Brain
+   - sudden-market-change analysis
+   - velocity / acceleration / jerk analysis
+   - counter-impulse detection
+   - persistence-break detection
+   - reversal/exhaustion analysis
+   - overlay
+   - START / LOCK
+   - WIN / LOSS / VOID
+   - screenshots and observations
+   - memory system
+   - session logging
+   - ZIP export
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project: $PROJECT_DIR"
+8. DO NOT add:
+   - signal quotas
+   - forced 30-signals-per-hour logic
+   - cooldown restrictions
+   - excessive WAIT filters
+   - martingale
+   - automatic order execution
+   - automatic stake sizing
+   - fake win-rate guarantees
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
+9. The Shock Brain is intended to IMPROVE DIRECTIONAL RESPONSE during sudden market changes.
+   It must complement the existing Direction Engine, NOT suppress the robot with additional hard restrictions.
 
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
+10. Preserve the separate applicationId/package identity of the Shock Brain version so that it can be installed NEXT TO the existing 71.7.27 1M version on the same Android phone.
+    DO NOT change it back to the original application's applicationId.
 
-          if [ -f gradlew ]; then
-            chmod +x gradlew
-            ./gradlew --no-daemon assembleDebug
-          else
-            gradle --no-daemon assembleDebug
-          fi
+11. Preserve independent app data/storage so the original version and Shock Brain version can be A/B tested separately.
 
-      - name: Collect APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+BUILD REQUIREMENTS:
 
-          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
+- JDK 17
+- Existing compatible Android/Gradle configuration
+- Build target: assembleDebug
+- Do not unnecessarily upgrade Gradle, AGP, Kotlin, SDK versions, or dependencies.
+- Fix ONLY genuine build/compilation issues if any exist.
 
-          if [ -z "$APK" ]; then
-            echo "::error::APK not found"
-            exit 1
-          fi
+MANDATORY PRE-DELIVERY VALIDATION:
 
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-71.7.27-1M.apk"
+Before returning the final ZIP:
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-71.7.27-1M
-          path: apk-output/LiveSignalAssistant-71.7.27-1M.apk
-          if-no-files-found: error
+A. Confirm the project contains:
+   - settings.gradle OR settings.gradle.kts
+   - root build.gradle OR build.gradle.kts
+   - app/
+   - AndroidManifest.xml
+   - Kotlin/Java source
+   - Android resources
+
+B. Open and inspect:
+   .github/workflows/build-apk.yml
+
+   Confirm it contains ONLY valid YAML.
+   If it contains any part of this prompt, DELETE that prose and restore a valid GitHub Actions workflow.
+
+C. Run/validate:
+   assembleDebug
+
+D. Confirm a debug APK is successfully produced.
+
+E. Confirm the Shock Brain application has a DIFFERENT applicationId from the original application so both APKs can coexist on the same device.
+
+F. Do NOT remove or overwrite the original application's package.
+
+FINAL OUTPUT:
+
+Return exactly ONE complete source ZIP named:
+
+LiveSignalAssistant_71.7.27_1M_SHOCK_BRAIN_BUILD_READY.zip
+
+Do NOT return an APK-only package.
+Do NOT return a partial patch.
+Do NOT return multiple alternative projects.
+Do NOT put this prompt inside any project file.
+Do NOT rewrite build-apk.yml with prose.
+
+Build, validate, and return the single final source ZIP.
