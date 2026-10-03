@@ -1,139 +1,64 @@
-The GitHub Actions workflow is now VALID and running correctly.
+name: Build Live Signal Assistant
 
-DO NOT MODIFY .github/workflows/build-apk.yml.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-The current build failure is:
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-ERROR:
-settings.gradle/settings.gradle.kts not found
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-The repository does NOT currently contain the Android source project.
+      - name: Show repository files
+        run: |
+          echo "=== REPOSITORY FILES ==="
+          find . -maxdepth 4 -type f | sort
 
-Your task is to IMPORT THE ATTACHED ANDROID PROJECT INTO THE REPOSITORY.
+      - name: Find Android project
+        id: project
+        shell: bash
+        run: |
+          SETTINGS=$(find . -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
-Attached file:
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Android source project is not present in this repository."
+            exit 1
+          fi
 
-LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "PROJECT FOUND: $PROJECT_DIR"
 
-IMPORTANT:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-The ZIP itself must NOT simply be committed to the repository.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-You must EXTRACT the ZIP first.
+      - name: Build APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew clean assembleDebug --stacktrace
+          else
+            gradle clean assembleDebug --stacktrace
+          fi
 
-Then inspect the extracted contents and locate the actual Android project root containing:
-
-settings.gradle
-or
-settings.gradle.kts
-
-The Android project must also contain the app module and its Gradle build files.
-
-COPY THE EXTRACTED ANDROID PROJECT CONTENTS INTO THE ROOT OF THE EXISTING GITHUB REPOSITORY.
-
-After the operation, the repository should contain something structurally similar to:
-
-.github/
-app/
-settings.gradle
-build.gradle
-gradle.properties
-
-or the equivalent Kotlin DSL files.
-
-CRITICAL:
-
-PRESERVE the currently working file:
-
-.github/workflows/build-apk.yml
-
-DO NOT overwrite it with any workflow contained inside the ZIP.
-
-DO NOT put this prompt into any repository file.
-
-DO NOT create a text file containing these instructions.
-
-DO NOT modify trading application logic.
-
-DO NOT modify:
-
-SignalAnalyzer.kt
-CaptureService.kt
-Vision logic
-UP/DOWN/WAIT logic
-1m/4m/5m horizon logic
-memory logic
-scoring
-calibration
-entry logic
-trading thresholds
-
-This task is ONLY to put the missing Android source project into the repository.
-
-Before committing, verify from the repository root that this command returns an actual file:
-
-find . -maxdepth 4 \( -name "settings.gradle" -o -name "settings.gradle.kts" \)
-
-Also verify:
-
-find . -maxdepth 5 -type f \( -name "build.gradle" -o -name "build.gradle.kts" \)
-
-And verify that:
-
-app/src/main/AndroidManifest.xml
-
-exists.
-
-If settings.gradle/settings.gradle.kts does NOT exist after extraction:
-
-STOP.
-
-Do NOT invent a new Android project.
-
-Inspect the attached ZIP and report that the supplied package is incomplete.
-
-If the Android project exists:
-
-Commit ALL required extracted Android project source files to main.
-
-Do NOT commit only the ZIP.
-
-Push the commit.
-
-Then inspect the ACTUAL GitHub Actions run.
-
-The existing workflow should automatically locate settings.gradle/settings.gradle.kts and start the Android build.
-
-If the build fails AFTER the Android project is found:
-
-Read the exact new Gradle/compiler error.
-
-Fix only the minimum build/configuration issue necessary.
-
-Do NOT change trading behavior.
-
-Continue until the APK is successfully built and uploaded.
-
-SUCCESS requires:
-
-1. settings.gradle/settings.gradle.kts exists in the GitHub repository
-2. app module exists
-3. GitHub Actions finds the Android project
-4. Gradle build actually starts
-5. Gradle build succeeds
-6. APK is generated
-7. APK artifact is uploaded
-
-At the end report:
-
-STATUS:
-COMMIT SHA:
-ANDROID PROJECT ROOT:
-SETTINGS FILE:
-APP MODULE:
-BUILD RESULT:
-APK ARTIFACT:
-FILES ADDED:
-FILES MODIFIED:
-
-Do not report SUCCESS unless the APK artifact actually exists.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27
+          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
