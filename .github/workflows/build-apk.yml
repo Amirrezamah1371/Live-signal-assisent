@@ -1,169 +1,86 @@
-name: Build Trader Robot 71.7.27 DATA DRIVEN
+Use the attached file:
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+LiveSignalAssistant_71.7.27_FINAL_RESEARCH.zip
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+This ZIP is the FINAL RESEARCH source project for our Live Signal Assistant 71.7.27.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+Your task is ONLY to build this exact project and produce the installable Android APK.
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+IMPORTANT RULES:
 
-      - name: Set up Gradle 8.9
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
+1. Do NOT redesign, rewrite, simplify, optimize, refactor, or modify the trading logic.
+2. Do NOT change SignalAnalyzer.kt, CaptureService.kt, memory logic, decision logic, Vision logic, horizon logic, thresholds, scoring, WAIT behavior, UP/DOWN logic, or expiry selection.
+3. Do NOT add any indicators, strategies, filters, Martingale logic, auto-trading, or new trading rules.
+4. Do NOT change the supported expiries. They must remain exactly:
+   - 1 minute
+   - 4 minutes
+   - 5 minutes
+5. Do NOT rename the application/version. Keep version 71.7.27.
+6. Do NOT replace the project with code from an older repository version.
+7. The attached ZIP is the source of truth.
+8. Extract the ZIP and place the actual Android project contents at the repository root.
+9. Do NOT commit the source ZIP itself as the application architecture.
+10. Preserve the complete directory structure and all source files from the ZIP.
 
-      - name: Prepare Android SDK
-        shell: bash
-        run: |
-          set -euo pipefail
+Before building:
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
+- Verify settings.gradle/settings.gradle.kts.
+- Verify the app module exists.
+- Verify build.gradle/build.gradle.kts files.
+- Verify AndroidManifest.xml.
+- Verify all Kotlin source files are present.
+- Verify Gradle/JDK/Android SDK compatibility.
+- Verify the GitHub Actions workflow is valid YAML.
+- Do not wrap YAML in Markdown code fences.
+- Save workflow as plain UTF-8 text with normal LF line endings.
 
-          SDKMANAGER=""
+Then build the project.
 
-          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          fi
+Use JDK 17.
 
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1 || true)
-          fi
+If the project contains a Gradle wrapper, use:
 
-          if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager | head -n 1 || true)
-          fi
+chmod +x ./gradlew
+./gradlew clean assembleDebug --stacktrace
 
-          if [ -z "$SDKMANAGER" ]; then
-            echo "sdkmanager not found"
-            exit 1
-          fi
+If there is no Gradle wrapper, use a compatible Gradle installation and run:
 
-          echo "Using sdkmanager: $SDKMANAGER"
+gradle clean assembleDebug --stacktrace
 
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+Do not claim success until GitHub Actions actually completes successfully.
 
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+If the build fails:
 
-      - name: Locate source ZIP
-        id: source
-        shell: bash
-        run: |
-          set -euo pipefail
+- Read the EXACT GitHub Actions error.
+- Fix ONLY the technical/build issue responsible for that error.
+- Do not modify trading behavior to solve a build problem.
+- Run the build again.
+- Repeat until the workflow is GREEN.
 
-          ZIP=$(find "$GITHUB_WORKSPACE" -type f -name "Trader_Robot_71.7.27_DATA_DRIVEN.zip" | head -n 1 || true)
+If the workflow itself is rejected as invalid:
 
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: Trader_Robot_71.7.27_DATA_DRIVEN.zip not found"
-            exit 1
-          fi
+- Inspect the actual .github/workflows/build-apk.yml committed to GitHub.
+- Fix the exact YAML/parser problem.
+- Do not invent a different project structure.
+- Do not create a workflow that searches for the ZIP inside the repository.
+- The extracted Android project must already be at repository root.
 
-          echo "Found source:"
-          echo "$ZIP"
+After a successful build:
 
-          unzip -t "$ZIP"
+- Locate the generated debug APK.
+- Upload it using actions/upload-artifact@v4.
+- Artifact name:
 
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+LiveSignalAssistant-71.7.27-FINAL-RESEARCH
 
-      - name: Extract source
-        shell: bash
-        run: |
-          set -euo pipefail
+Before finishing, verify that the APK artifact actually exists.
 
-          DEST="$RUNNER_TEMP/trader-robot"
+Finally report ONLY:
 
-          rm -rf "$DEST"
-          mkdir -p "$DEST"
+1. Build status: SUCCESS or FAILURE
+2. Commit SHA used for the successful build
+3. APK artifact name
+4. APK path
+5. Any build-only files that had to be modified
 
-          unzip -q "${{ steps.source.outputs.zip }}" -d "$DEST"
-
-          echo "Source extracted to:"
-          echo "$DEST"
-
-      - name: Locate Android project
-        id: project
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ROOT=""
-
-          SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle" | head -n 1 || true)
-
-          if [ -n "$SETTINGS" ]; then
-            ROOT=$(dirname "$SETTINGS")
-          fi
-
-          if [ -z "$ROOT" ]; then
-            SETTINGS=$(find "$RUNNER_TEMP/trader-robot" -type f -name "settings.gradle.kts" | head -n 1 || true)
-
-            if [ -n "$SETTINGS" ]; then
-              ROOT=$(dirname "$SETTINGS")
-            fi
-          fi
-
-          if [ -z "$ROOT" ]; then
-            echo "ERROR: Android project root not found"
-            find "$RUNNER_TEMP/trader-robot" -maxdepth 4 -type f | sort
-            exit 1
-          fi
-
-          echo "Android project root:"
-          echo "$ROOT"
-
-          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
-
-      - name: Build APK
-        shell: bash
-        working-directory: ${{ steps.project.outputs.root }}
-        run: |
-          set -euo pipefail
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug --stacktrace
-          else
-            gradle clean assembleDebug --stacktrace
-          fi
-
-      - name: Collect APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-
-          APK=$(find "${{ steps.project.outputs.root }}" -type f -path "*/build/outputs/apk/debug/*.apk" | head -n 1 || true)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: Debug APK not found"
-            exit 1
-          fi
-
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
-
-          echo "APK created:"
-          ls -lh "$GITHUB_WORKSPACE/apk-output/Trader-Robot-71.7.27.apk"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Trader-Robot-71.7.27
-          path: apk-output/Trader-Robot-71.7.27.apk
-          if-no-files-found: error
-          retention-days: 30
+Do not make additional changes after a successful build.
