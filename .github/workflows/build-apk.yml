@@ -1,36 +1,92 @@
-Use ONLY the attached file:
+name: Build Adaptive Recency
 
-LiveSignalAssistant_71.7.27_1M_ADAPTIVE_RECENCY.zip
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-Build the Android project exactly as provided.
+permissions:
+  contents: read
 
-Do NOT redesign, rewrite, optimize, or change the trading logic.
-Do NOT modify the Direction Engine, Adaptive Recency logic, timer, signal frequency, WAIT behavior, memory, overlay, or export system.
-Do NOT add cooldowns, quotas, restrictions, or additional filters.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-IMPORTANT:
-This version MUST have a different applicationId/package from the existing PRECISE version so BOTH applications can remain installed on the same Android phone simultaneously.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-Preserve the separate applicationId already included in this project:
-com.example.livesignalassistant.recency71727
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-Do NOT change it back to the original package.
+      - name: Extract source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-Use JDK 17.
-Build target:
-assembleDebug
+          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*ADAPTIVE_RECENCY*.zip' -print -quit)"
 
-CRITICAL:
-Do NOT put this prompt or any natural-language instructions inside .github/workflows/build-apk.yml.
+          if [ -z "$ZIP" ]; then
+            echo "::error::ADAPTIVE_RECENCY ZIP not found"
+            exit 1
+          fi
 
-build-apk.yml must contain ONLY valid GitHub Actions YAML.
+          DEST="$RUNNER_TEMP/adaptive-recency"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          unzip -q "$ZIP" -d "$DEST"
 
-Do not create or modify build-apk.yml unless necessary for a successful build.
+          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
 
-Return ONE complete build-ready source ZIP:
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle not found"
+            exit 1
+          fi
 
-LiveSignalAssistant_71.7.27_1M_ADAPTIVE_RECENCY_BUILD_READY.zip
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-Do not return an APK-only ZIP.
-Do not create alternative versions.
-Do not change application logic.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+
+          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found"
+            exit 1
+          fi
+
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/Adaptive-Recency-71.7.27.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Adaptive-Recency-71.7.27
+          path: apk-output/Adaptive-Recency-71.7.27.apk
+          if-no-files-found: error
