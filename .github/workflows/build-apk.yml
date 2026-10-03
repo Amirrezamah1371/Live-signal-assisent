@@ -1,250 +1,91 @@
-Use ONLY the attached ZIP file:
-
-LiveSignalAssistant_71.7.27_1M_PRECISE.zip
-
-This ZIP contains the complete Android source project and is the ONLY source of truth for this build.
-
-IMPORTANT:
-- Do NOT redesign the application.
-- Do NOT recreate the project from scratch.
-- Do NOT replace the trading/analysis engine with placeholder or mock logic.
-- Do NOT remove existing features.
-- Do NOT add automatic trading or automatic order execution.
-- Preserve the existing package/application structure and all working Android functionality.
-- Preserve the existing floating overlay, screen capture, START/LOCK workflow, WIN/LOSS/VOID controls, memory system, screenshots/observations, session logging, and ZIP export.
-- The application version must remain based on 71.7.27.
-- Do not modify working behavior unless required to make the supplied source compile.
-
-CORE TRADING CONFIGURATION:
-This version is intentionally SINGLE-HORIZON.
-
-The ONLY supported trading timeframe/expiry is:
-
-1 MINUTE / 60 SECONDS
-
-There must be:
-- NO 30-second mode
-- NO 2-minute mode
-- NO 3-minute mode
-- NO 4-minute mode
-- NO 5-minute mode
-- NO timeframe voting
-- NO horizon selection
-- NO automatic switching between expiries
-
-The analysis engine must always know that the target question is:
-
-"From the exact locked entry point, where is the observed price approximately 60 seconds later?"
-
-The engine must NOT repeatedly spend analysis cycles deciding which timeframe to use.
-
-TIMING:
-Timing accuracy is critical.
-
-Use a monotonic high-resolution clock for elapsed-time measurement.
-
-Do NOT depend on wall-clock time for the 60-second expiry.
-
-Record timing internally at high resolution and preserve:
-- entry timestamp
-- monotonic entry time
-- elapsed milliseconds
-- remaining milliseconds
-- frame timestamp
-- decision timestamp
-- lock timestamp
-- expiry timestamp
-
-The UI may display remaining time to hundredths of a second when practical, but NEVER pretend that screen-capture price data has 10ms market-data resolution.
-
-The timer must measure elapsed time accurately even when frame delivery is irregular.
-
-ENTRY:
-The 60-second evaluation begins ONLY when the user locks/starts the signal.
-
-Signal creation is NOT the trade entry time.
-
-The locked price/location becomes the reference entry point.
-
-ANALYSIS:
-The system must analyze the PRICE PATH, not merely the final candle color.
-
-Continuously extract useful observable information from the captured chart, including when reliably measurable:
-
-- short-term direction
-- displacement
-- velocity
-- acceleration/deceleration
-- directional persistence
-- micro pullbacks
-- rejection
-- continuation
-- reversal behavior
-- local range
-- volatility expansion/contraction
-- wick/body evolution
-- impulse strength
-- exhaustion
-- failed continuation
-- failed breakout
-- sudden movement
-- instability
-- conflicting evidence
-- local support/resistance interaction
-- distance travelled from recent local structure
-- late-entry risk
-- continuation-after-exhaustion risk
-
-Do not fabricate order-book data, volume, order-flow, or indicators that are not actually visible/available from the captured chart.
-
-A sudden price movement must NOT automatically generate a signal.
-
-A sudden movement must instead trigger reassessment of:
-- continuation probability evidence
-- exhaustion evidence
-- reversal evidence
-- instability
-- entry quality
-
-The engine should react to new evidence without panic and without blindly chasing an impulse.
-
-DECISION ENGINE:
-Exactly three decisions are allowed:
-
-UP
-DOWN
-WAIT
-
-WAIT is a valid decision, but the engine must NOT become unnecessarily paralyzed.
-
-The goal is BALANCED SELECTIVITY:
-
-Do not generate weak signals merely to increase signal count.
-
-At the same time, do not stack so many redundant filters that almost every usable setup becomes WAIT.
-
-Do not implement a mandatory signal quota.
-
-Specifically:
-DO NOT force 30 signals per hour.
-DO NOT lower thresholds merely because signal frequency is low.
-DO NOT fabricate a target win rate.
-
-The research/testing benchmark may be approximately 30 usable opportunities per hour and 25 wins out of 30, but this is ONLY an empirical evaluation target.
-
-It is NOT a guaranteed performance requirement and must NEVER be encoded as:
-- forced signal frequency
-- fake confidence
-- hard-coded win rate
-- result manipulation
-
-If market/chart evidence is genuinely insufficient, output WAIT.
-
-If evidence is sufficiently coherent, issue the signal without requiring impossible certainty.
-
-DIRECTIONAL BALANCE:
-UP and DOWN must be evaluated symmetrically.
-
-Do not introduce a DOWN bias or UP bias.
-
-A direction should win only because the current observable path evidence supports it.
-
-EPSILON / ENDPOINT:
-Near the expiry boundary, use an explicit epsilon/dead-zone policy so tiny image-coordinate noise is not treated as meaningful directional movement.
-
-The epsilon must be based on observable chart noise/scale where possible, not an arbitrary claim of market precision.
-
-Preserve enough telemetry to later evaluate whether epsilon is too large or too small.
-
-CONFIDENCE:
-Do NOT present an internal model score as a calibrated probability of winning.
-
-If a diagnostic score is displayed, clearly treat it as setup/decision strength, not "probability of WIN".
-
-Do not display fake values such as "96% win probability" unless a future independently validated calibration model actually supports that interpretation.
-
-MEMORY AND LEARNING DATA:
-Preserve and improve the existing memory/export system.
-
-For every analysis cycle and every executed signal, log enough information to reconstruct what happened.
-
-Include where available:
-- cycle ID
-- signal ID
-- timestamps
-- pair
-- fixed 1m horizon
-- direction
-- entry reference
-- elapsed time
-- decision strength
-- path features
-- volatility state
-- impulse/exhaustion information
-- reversal evidence
-- conflicting evidence
-- reason for UP/DOWN/WAIT
-- screenshots/observations
-- manual WIN/LOSS/VOID result
-
-Keep exported data suitable for later out-of-sample evaluation.
-
-Do NOT automatically alter strategy thresholds from a tiny number of recent trades.
-
-Avoid overfitting.
-
-ONE DECISION:
-Preserve the ONE DECISION architecture.
-
-Do not spam multiple competing signals during the same decision event.
-
-Once a signal is locked, do not replace its direction during the active 60-second trade.
-
-After expiry, show the existing WIN / LOSS / VOID result controls.
-
-SAFETY / EXECUTION:
-This remains an analysis assistant.
-
-NO automatic order execution.
-NO martingale.
-NO automatic stake sizing.
-NO forced recovery trades.
-
-BUILD REQUIREMENTS:
-Inspect the supplied source before changing anything.
-
-Make only the minimum code changes necessary to preserve the intended 1-minute architecture and obtain a clean Android build.
-
-Use JDK 17 and the project's existing compatible Gradle/Android configuration.
-
-Do not paste these instructions into a YAML file or source-code file.
-
-If a GitHub Actions workflow already exists and is valid, preserve/fix it rather than replacing it with prose.
-
-The final deliverable must be a COMPLETE BUILDABLE SOURCE ZIP, not an APK-only ZIP and not a partial patch.
-
-Before returning the ZIP, verify that it contains at minimum:
-- settings.gradle or settings.gradle.kts
-- root build.gradle or build.gradle.kts
-- app/
-- AndroidManifest.xml
-- Kotlin/Java source
-- resources
-- a valid GitHub Actions workflow if the project uses GitHub Actions
-
-Then run or otherwise validate the Android debug build.
-
-The expected build target is:
-
-assembleDebug
-
-Return ONE final ZIP containing the complete corrected source project.
-
-Suggested output filename:
-
-LiveSignalAssistant_71.7.27_1M_PRECISE_BUILD_READY.zip
-
-Do not return explanations instead of the file.
-Do not create multiple alternative versions.
-Do not change the project into a different application.
-Build and return the single final source ZIP.
+name: Build Live Signal Assistant 71.7.27 1M
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Find and extract source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*1M_PRECISE*.zip' -print -quit)"
+
+          if [ -z "$ZIP" ]; then
+            echo "::error::1M_PRECISE source ZIP not found"
+            exit 1
+          fi
+
+          DEST="$RUNNER_TEMP/live-signal-source"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          unzip -q "$ZIP" -d "$DEST"
+
+          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
+
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::Gradle settings file not found inside ZIP"
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project: $PROJECT_DIR"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+
+          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found"
+            exit 1
+          fi
+
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-71.7.27-1M.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-1M
+          path: apk-output/LiveSignalAssistant-71.7.27-1M.apk
+          if-no-files-found: error
