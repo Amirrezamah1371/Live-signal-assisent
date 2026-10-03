@@ -1,140 +1,36 @@
-Use ONLY the attached file:
+name: Build Live Signal Assistant
 
-LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-This ZIP is the corrected source package and is the ONLY source of truth.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-IMPORTANT:
-Do NOT reuse any existing workflow from the repository.
-Do NOT rewrite or redesign the GitHub Actions workflow.
-Do NOT modify the trading logic.
-Do NOT modify any Kotlin source unless a genuine compilation error specifically requires a non-behavioral build fix.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-TASK:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-1. Remove the existing project files from the repository that are being replaced by this package.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-2. Extract:
-LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip
+      - name: Build debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
 
-3. Copy the EXTRACTED PROJECT CONTENTS into the repository root.
-
-The Android project itself must be at repository root.
-
-DO NOT commit the ZIP as the project.
-DO NOT create a workflow that searches for or extracts the ZIP during GitHub Actions.
-
-4. VERY IMPORTANT:
-
-Use the exact workflow already contained inside the ZIP:
-
-.github/workflows/build-apk.yml
-
-Copy that file BYTE-FOR-BYTE from the extracted ZIP.
-
-DO NOT:
-- regenerate it
-- rewrite it
-- reformat it
-- convert its encoding
-- add comments
-- add Markdown fences
-- change the "on" key
-- create another workflow
-
-The workflow contained in this BUILD_FIXED package has already been corrected and YAML-parsed before packaging.
-
-5. After copying the project, verify that the committed workflow is identical to the workflow extracted from the ZIP.
-
-Compare them byte-for-byte.
-
-If possible use:
-
-cmp --silent EXTRACTED_WORKFLOW .github/workflows/build-apk.yml
-
-or calculate SHA-256 hashes of both files and confirm they are identical.
-
-Also verify:
-
-- no UTF-8 BOM
-- no tabs
-- no CRLF conversion
-- no hidden characters
-- no Markdown fences
-
-6. Commit the extracted project to main.
-
-7. Push the commit.
-
-8. YOU MUST inspect the ACTUAL GitHub Actions run after the push.
-
-Do not stop after committing.
-
-The previous repository repeatedly failed with:
-
-Invalid workflow file
-.github/workflows/build-apk.yml#L3
-
-Therefore first verify that this error is GONE.
-
-If GitHub still reports line 3 YAML syntax error:
-
-STOP modifying files.
-
-Compare the GitHub committed blob directly against the workflow from the ZIP using:
-
-git show HEAD:.github/workflows/build-apk.yml
-
-and:
-
-git show HEAD:.github/workflows/build-apk.yml | xxd
-
-Determine exactly why the committed file differs from the supplied BUILD_FIXED workflow.
-
-Do NOT invent another YAML workflow.
-
-9. Once GitHub accepts the workflow, allow the Android build to run.
-
-If Gradle/Android compilation fails:
-
-- inspect the exact error
-- fix ONLY the minimum build/configuration problem
-- preserve application behavior
-- run GitHub Actions again
-
-NEVER change:
-
-- SignalAnalyzer trading logic
-- UP/DOWN/WAIT behavior
-- Vision analysis
-- horizon selection
-- 1m/4m/5m support
-- scoring logic
-- calibration logic
-- memory/export behavior
-- entry logic
-- trading thresholds
-- strategy behavior
-
-10. Continue until the APK is successfully generated and uploaded as a GitHub Actions artifact.
-
-SUCCESS means ALL of these are true:
-
-- GitHub parses build-apk.yml successfully
-- Build job actually starts
-- Gradle build succeeds
-- APK is generated
-- Upload artifact succeeds
-- APK artifact is visible in the successful Actions run
-
-Do NOT report success before this happens.
-
-FINAL RESPONSE ONLY:
-
-STATUS: SUCCESS / FAILURE
-COMMIT SHA:
-WORKFLOW STATUS:
-BUILD STATUS:
-APK ARTIFACT NAME:
-APK PATH:
-FILES MODIFIED AFTER EXTRACTION:
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-FINAL-RESEARCH
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
