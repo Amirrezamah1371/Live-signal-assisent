@@ -1,97 +1,83 @@
-STOP. Do not modify any Android source code.
+The GitHub Actions workflow is still failing BEFORE execution.
 
-The current GitHub Actions run fails BEFORE any job starts with:
+Current failed commit:
+5b97352
+
+Exact GitHub error:
 
 Invalid workflow file
 .github/workflows/build-apk.yml#L3
-You have an error in your yaml syntax on line 3.
+You have an error in your yaml syntax on line 3
 
-This is a GitHub Actions YAML parsing problem, NOT an Android/Gradle/build problem.
+Your task is to FIX THIS YOURSELF completely.
 
-Open the ACTUAL file currently committed at:
+Do NOT ask me to inspect files.
+Do NOT ask me to copy GitHub content.
+Do NOT ask me for screenshots.
+Do NOT stop after editing the file.
+You have access to the repository, so inspect the actual committed repository yourself.
+
+IMPORTANT:
+
+The Android trading application source is NOT the problem.
+Do NOT modify ANY Android/Kotlin/trading logic.
+
+Do not modify:
+- SignalAnalyzer.kt
+- CaptureService.kt
+- Vision logic
+- UP/DOWN/WAIT logic
+- Horizon logic
+- 1m/4m/5m logic
+- Memory system
+- Trading rules
+- Thresholds
+- Scores
+- Confidence/calibration logic
+
+ONLY diagnose and repair the GitHub Actions/build infrastructure.
+
+STEP 1 — INSPECT THE REAL FILE
+
+Open the ACTUAL committed file at commit 5b97352:
 
 .github/workflows/build-apk.yml
 
-Do not use a local copy and do not infer its contents from the ZIP.
+Inspect its RAW contents.
 
-First inspect the raw committed file, especially lines 1-10.
+Check specifically for:
 
-Then completely replace ONLY this workflow file with the following exact raw text:
+- UTF-8 BOM
+- invisible Unicode characters
+- non-breaking spaces
+- zero-width characters
+- smart quotes
+- Markdown code fences
+- tabs
+- CRLF/LF corruption
+- malformed indentation
+- duplicate YAML keys
+- characters before "name:"
+- malformed "on" key
+- incorrect file encoding
+- accidental text inserted by previous edits
 
-name: Build Android APK
+Do NOT assume the displayed text is identical to the raw file.
 
-"on":
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+STEP 2 — DELETE THE BROKEN WORKFLOW FILE COMPLETELY
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+Delete:
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+.github/workflows/build-apk.yml
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+Do not edit it in place.
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
+STEP 3 — CREATE A BRAND-NEW FILE
 
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug --stacktrace
+Create a NEW file at exactly:
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-71.7.27-FINAL-RESEARCH
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+.github/workflows/build-apk.yml
 
-CRITICAL REQUIREMENTS:
-
-- Modify ONLY .github/workflows/build-apk.yml.
-- Do NOT touch any Kotlin/Android/trading source code.
-- Do NOT put Markdown ``` fences into the YAML file.
-- Save it as plain UTF-8 WITHOUT BOM.
-- Use LF line endings.
-- Use spaces only, NEVER tabs.
-- Keep the key exactly as "on": including the quotation marks.
-- Do not add comments or explanatory text to the YAML.
-- Do not redesign the workflow.
-- Do not create another workflow file.
-
-Before committing, print the exact raw contents of .github/workflows/build-apk.yml with line numbers so we can verify that line 3 is exactly:
-
-"on":
-
-Then commit the change to main.
-
-After committing, trigger GitHub Actions.
-
-IMPORTANT:
-Do not claim that the problem is fixed merely because the file was committed.
-
-Check the ACTUAL GitHub Actions run.
-
-Success for this stage means GitHub accepts the workflow and displays the build job/steps instead of:
-
-Invalid workflow file ... #L3
-
-If GitHub STILL reports an invalid workflow:
-STOP.
-Do not rewrite anything else.
-Return:
-1. Exact commit SHA
-2. Exact raw contents of build-apk.yml with line numbers
-3. Exact GitHub annotation/error
-4. Exact bytes/encoding information for the first 10 lines if available.
-
-If GitHub accepts the workflow but a build step later fails, report that NEW build error exactly. Do not modify Android source code automatically.
+It must be plain UTF-8 WITHOUT BOM.
+Use LF line endings.
+Use spaces only
