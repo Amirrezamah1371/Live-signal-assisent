@@ -1,128 +1,140 @@
-The repository is STILL failing with:
+Fix the repository and build the APK.
 
-Invalid workflow file
+The current GitHub Actions workflow is invalid and GitHub reports:
+
 .github/workflows/build-apk.yml#L3
-You have an error in your yaml syntax on line 3
+YAML syntax error on line 3
 
-STOP trying to repair or reuse the existing workflow.
+Do not modify any application source code or trading logic.
 
-DO NOT modify ANY Android/Kotlin source files.
-
-Your only task now is to prove that GitHub Actions can parse a newly created workflow.
-
-1. Delete this file completely:
+Delete the current broken file:
 
 .github/workflows/build-apk.yml
 
-2. Commit that deletion if necessary.
-
-3. Create a completely NEW plain-text file at:
+Then create a brand-new file at exactly:
 
 .github/workflows/build-apk.yml
 
-Do NOT copy the previous workflow.
-Do NOT copy the workflow from the ZIP.
-Do NOT generate it from Markdown.
-Do NOT use a template.
+Write the workflow as a real YAML file directly in the repository.
+Do NOT put Markdown code fences in the file.
+Do NOT escape newline characters.
+Do NOT write "\n" as text.
+Do NOT generate the YAML as a quoted string.
+Use UTF-8 without BOM and normal LF line endings.
 
-Write EXACTLY these lines into the file:
+The new file must contain EXACTLY:
 
-name: Workflow Test
-on: [push]
+name: Build Live Signal Assistant
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
 jobs:
-  test:
+  build:
+    name: Build APK
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "WORKFLOW_OK"
+      - name: Checkout
+        uses: actions/checkout@v4
 
-Nothing else may exist in this file.
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-STRICT FILE REQUIREMENTS:
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
 
-- UTF-8 without BOM
-- LF line endings only
-- ASCII characters only
-- spaces only
-- no tabs
-- no comments
-- no Markdown code fences
-- no blank lines before "name:"
-- no invisible Unicode characters
-- no additional YAML
-- no Android build commands
-- no Gradle commands
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
-Before committing, inspect the RAW BYTES of the newly created file.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-FINAL-RESEARCH
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
-The exact complete file must be:
+IMPORTANT:
 
-name: Workflow Test\n
-on: [push]\n
-jobs:\n
-  test:\n
-    runs-on: ubuntu-latest\n
-    steps:\n
-      - run: echo "WORKFLOW_OK"\n
+Do not copy or reuse the old workflow.
 
-Verify that the first bytes are ASCII:
+Do not modify:
+- SignalAnalyzer.kt
+- CaptureService.kt
+- Android application behavior
+- Vision logic
+- UP/DOWN/WAIT logic
+- 1m/4m/5m horizon logic
+- memory/export logic
+- trading rules
+- thresholds
+- scoring
 
-6e 61 6d 65 3a
+Before committing, validate the workflow file that actually exists in the Git working tree.
 
-and that there is NO UTF-8 BOM:
+Then commit it to main and push.
 
-ef bb bf
+After pushing, YOU must open/check the new GitHub Actions run.
 
-Commit and push this new file to main.
+Do not stop after creating the commit.
 
-THEN inspect the ACTUAL GitHub Actions run.
+If GitHub reports "Invalid workflow file" again, inspect the exact committed blob using:
 
-SUCCESS AT THIS STAGE MEANS:
+git show HEAD:.github/workflows/build-apk.yml
 
-GitHub no longer displays:
+and inspect its bytes using:
 
-Invalid workflow file
+git show HEAD:.github/workflows/build-apk.yml | xxd
 
-and a job named "test" actually runs and the step prints:
+Compare the committed file with the intended YAML and fix the ACTUAL corruption or formatting problem.
 
-WORKFLOW_OK
+Do not keep blindly rewriting line 3.
 
-DO NOT proceed to Android building until this exact minimal workflow has successfully executed.
+Continue until GitHub parses the workflow and the Build APK job actually starts.
 
-If this minimal workflow STILL fails on line 3:
+Once the workflow starts:
 
-DO NOT edit the YAML again.
+If Gradle fails, inspect the exact Gradle error and fix ONLY the minimum build/configuration issue required.
 
-Instead investigate the ACTUAL repository and determine why the bytes committed to GitHub differ from the bytes you created.
+Do not alter trading logic.
 
-Inspect:
+Run GitHub Actions again after each build fix.
 
-- the exact blob stored in the Git commit
-- git show HEAD:.github/workflows/build-apk.yml
-- raw byte/hex representation
-- file encoding
-- .gitattributes
-- any automation modifying workflow files
-- whether the failed run belongs to the newest commit
-- whether another build-apk.yml exists
-- whether your commit actually reached main
+Continue until:
 
-Compare the Git blob byte-for-byte against the exact 7-line workflow above.
+1. GitHub accepts the workflow.
+2. Build APK job runs.
+3. Gradle completes successfully.
+4. app-debug APK is created.
+5. Upload APK succeeds.
+6. The artifact LiveSignalAssistant-71.7.27-FINAL-RESEARCH exists in the successful run.
 
-DO NOT STOP until either:
+Do not report success before all six conditions are true.
 
-A) the minimal workflow runs successfully and prints WORKFLOW_OK
+At the end report:
 
-or
-
-B) you identify and report the exact repository-level reason GitHub is receiving different content.
-
-Do not touch the trading application under any circumstances.
-
-When finished report ONLY:
-
-1. Commit SHA
-2. Exact contents returned by:
-   git show HEAD:.github/workflows/build-apk.yml
-3. Whether GitHub parsed the workflow
-4. Whether WORKFLOW_OK executed
-5. If it failed, the exact root cause
+STATUS:
+COMMIT SHA:
+WORKFLOW RESULT:
+APK ARTIFACT:
+APK PATH:
+FILES MODIFIED:
