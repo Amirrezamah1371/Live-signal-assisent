@@ -1,46 +1,105 @@
 Use the uploaded file:
 
-LiveSignalAssistant_71.7.27_FIXED.zip
-
-This ZIP contains the complete Android project for:
-
-Live Signal Assistant 71.7.27
+LiveSignalAssistant_71.7.27_GITHUB_FIX.zip
 
 IMPORTANT:
-Do not recreate the project from scratch.
-Do not rewrite or redesign the application.
-Do not change the signal-analysis logic.
-Do not change SignalAnalyzer, CaptureService, memory logic, signal locking, expiry logic, overlay behavior, or UP/DOWN/WAIT decision logic unless a change is strictly required to fix a confirmed build error.
+Do not redesign, rewrite, simplify, or modify the application logic.
 
-The project already contains the intended source code and a corrected GitHub Actions workflow.
+Your task is to upload/extract this project into the GitHub repository and build it successfully.
 
-Your task is ONLY to:
+Follow these instructions exactly:
 
-1. Extract LiveSignalAssistant_71.7.27_FIXED.zip.
-2. Inspect the extracted project structure.
-3. Place the project files in the repository root while preserving the exact directory structure.
-4. Make sure this file exists exactly at:
-   .github/workflows/build-apk.yml
-5. Do NOT manually rewrite build-apk.yml if it is already valid.
-6. Validate the YAML syntax before committing.
-7. Verify that the workflow file uses valid GitHub Actions YAML syntax and indentation.
-8. Verify that settings.gradle(.kts), root build.gradle(.kts), gradle.properties, and the app module are in their correct locations.
-9. Do not create nested duplicate project directories.
-10. Do not remove any Android source files or resources.
-11. Do not simplify the project to make compilation easier.
-12. Commit the complete extracted project to the repository.
-13. Run the GitHub Actions APK build.
-14. If the build fails, read the exact build log and fix ONLY the specific build/compilation error.
-15. Never delete application functionality as a workaround for a build failure.
-16. Repeat the build after any required build fix until the workflow completes successfully.
+1. Extract LiveSignalAssistant_71.7.27_GITHUB_FIX.zip.
 
-The application must remain:
+2. Copy the CONTENTS of the extracted project into the ROOT of the GitHub repository.
+Do NOT create an additional nested folder.
+
+3. Preserve the complete existing project structure and all source files.
+
+4. The GitHub Actions workflow MUST be located exactly at:
+
+.github/workflows/build-apk.yml
+
+5. BEFORE committing anything, inspect and validate:
+.github/workflows/build-apk.yml
+
+It must be valid GitHub Actions YAML.
+
+6. DO NOT rewrite the workflow unnecessarily.
+
+7. If the workflow has ANY YAML syntax problem, fix the syntax BEFORE committing.
+
+8. Specifically verify the beginning of the workflow is valid and that the trigger section uses valid GitHub Actions syntax.
+
+9. Do not create duplicate workflow files.
+
+10. Remove/replace any OLD broken build-apk.yml currently present in the repository with the VALID workflow contained in this uploaded project.
+
+11. Make sure GitHub is not still using the previous broken workflow.
+
+12. Preserve:
+- SignalAnalyzer
+- CaptureService
+- screen capture
+- overlay
+- UP/DOWN/WAIT logic
+- ONE DECISION cycle
+- 1m/4m/5m expiries
+- signal locking
+- expiry timer
+- WIN/LOSS/VOID
+- memory system
+- screenshots/observations
+- JSON/CSV logging
+- ZIP export
+- existing vision analysis
+- late-entry protection
+- exhaustion protection
+
+13. DO NOT modify the trading/signal algorithm.
+
+14. DO NOT add:
+- random signals
+- placeholder signals
+- Martingale
+- automatic trading
+- 30s expiry
+- 2m expiry
+- 3m expiry
+
+15. Keep the application identity:
 
 Live Signal Assistant 71.7.27
 
-Keep versionName:
-71.7.27
+Keep:
+versionName = "71.7.27"
 
-Preserve all existing functionality, including:
+16. Commit the corrected complete project to the main branch.
 
-- Screen
+17. Trigger the GitHub Actions workflow.
+
+18. DO NOT stop after committing.
+
+19. Check the actual GitHub Actions run.
+
+20. If GitHub reports "Invalid workflow file", inspect the EXACT line reported by GitHub, correct that YAML error, commit the correction, and run the workflow again.
+
+21. If YAML validation succeeds but the Android build fails, inspect the ACTUAL Gradle error and fix only that specific build problem.
+
+22. Repeat until GitHub Actions ACTUALLY RUNS and completes successfully.
+
+23. Do not report success merely because files were uploaded.
+
+SUCCESS means:
+- GitHub accepts build-apk.yml
+- The workflow graph/jobs are created
+- The Android build actually runs
+- GitHub Actions finishes GREEN
+- An APK artifact is produced
+
+FINAL OUTPUT:
+Provide the successfully generated APK artifact for:
+
+Live Signal Assistant 71.7.27
+
+Do not claim completion until the GitHub Actions run is GREEN.
