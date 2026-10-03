@@ -1,87 +1,59 @@
-Open the current GitHub repository.
+name: Build Live Signal Assistant
 
-Find the newly uploaded file:
-LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-DO NOT modify:
-.github/workflows/build-apk.yml
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-DO NOT write this prompt into any file.
-DO NOT modify any Kotlin/trading logic.
-DO NOT create a new project.
-DO NOT commit another copy of the ZIP.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-TASK:
+      - name: Find Android project
+        id: project
+        shell: bash
+        run: |
+          SETTINGS=$(find . -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
 
-1. Extract LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip.
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Android source project is not present in this repository."
+            exit 1
+          fi
 
-2. The extracted Android project contains:
-   settings.gradle.kts
-   build.gradle.kts
-   gradle.properties
-   app/
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "PROJECT FOUND: $PROJECT_DIR"
 
-3. Copy the CONTENTS of the extracted project directly into the ROOT of the current repository.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-The repository root must contain:
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-settings.gradle.kts
-build.gradle.kts
-gradle.properties
-app/
-.github/
+      - name: Build APK
+        working-directory: ${{ steps.project.outputs.dir }}
+        shell: bash
+        run: |
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew clean assembleDebug --stacktrace
+          else
+            gradle clean assembleDebug --stacktrace
+          fi
 
-IMPORTANT:
-Preserve the EXISTING:
-.github/workflows/build-apk.yml
-
-Do not replace, edit, regenerate, or delete it.
-
-4. Verify BEFORE committing that these exact paths exist:
-
-./settings.gradle.kts
-./build.gradle.kts
-./gradle.properties
-./app/build.gradle.kts
-./app/src/main/AndroidManifest.xml
-
-5. Also verify that the Kotlin source files from the ZIP exist under:
-./app/src/main/
-
-If any required file is missing, STOP and report the missing path.
-Do not invent replacement files.
-
-6. Commit the extracted Android source files to branch main and push.
-
-7. The existing GitHub Actions workflow should start automatically.
-
-8. Open the ACTUAL new GitHub Actions run.
-
-If "Find Android project" succeeds, continue.
-
-If Gradle compilation fails:
-- inspect the FIRST real Gradle/compiler error;
-- fix ONLY the minimum source/build configuration required for compilation;
-- do NOT redesign or change trading behavior;
-- commit the fix and run Actions again.
-
-Repeat only for genuine build/compiler errors until the build succeeds.
-
-9. Confirm that the final job reaches:
-Build APK = SUCCESS
-Upload APK = SUCCESS
-
-10. Confirm the APK artifact actually exists.
-
-Do not claim success merely because files were committed.
-
-FINAL RESPONSE ONLY:
-
-SOURCE EXTRACTED: YES/NO
-SETTINGS: FOUND/MISSING
-APP MODULE: FOUND/MISSING
-COMMIT SHA:
-BUILD APK: SUCCESS/FAILURE
-UPLOAD APK: SUCCESS/FAILURE
-APK ARTIFACT: <exact artifact name or NONE>
-FIRST REMAINING ERROR: <exact error or NONE>
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27
+          path: ${{ steps.project.outputs.dir }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
