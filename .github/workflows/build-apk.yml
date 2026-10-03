@@ -1,68 +1,87 @@
-Use the attached ZIP file as the Android project source.
+Open the current GitHub repository.
 
-Extract the ZIP.
+Find the newly uploaded file:
+LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip
 
-IMPORTANT:
-Do NOT put this prompt or any instruction text into any repository file.
-Do NOT upload only the ZIP to GitHub.
-Do NOT modify .github/workflows/build-apk.yml.
-Do NOT modify any trading logic or Kotlin source code.
-
-After extraction, locate the directory containing:
-
-settings.gradle.kts
-build.gradle.kts
-gradle.properties
-app/
-
-Copy ALL contents of that directory into the ROOT of the existing GitHub repository.
-
-The repository root MUST end up containing:
-
-settings.gradle.kts
-build.gradle.kts
-gradle.properties
-app/
-
-Preserve the existing:
-
+DO NOT modify:
 .github/workflows/build-apk.yml
 
-Do NOT replace it.
+DO NOT write this prompt into any file.
+DO NOT modify any Kotlin/trading logic.
+DO NOT create a new project.
+DO NOT commit another copy of the ZIP.
 
-Before committing, verify these exact files exist in the repository working tree:
+TASK:
+
+1. Extract LiveSignalAssistant_71.7.27_FINAL_RESEARCH_BUILD_FIXED.zip.
+
+2. The extracted Android project contains:
+   settings.gradle.kts
+   build.gradle.kts
+   gradle.properties
+   app/
+
+3. Copy the CONTENTS of the extracted project directly into the ROOT of the current repository.
+
+The repository root must contain:
 
 settings.gradle.kts
 build.gradle.kts
 gradle.properties
-app/build.gradle.kts
-app/src/main/AndroidManifest.xml
+app/
+.github/
 
-Also verify that the Kotlin source files under app/src/main/ are present.
+IMPORTANT:
+Preserve the EXISTING:
+.github/workflows/build-apk.yml
 
-If any of those files are missing, DO NOT commit and report exactly what is missing.
+Do not replace, edit, regenerate, or delete it.
 
-If they are present:
+4. Verify BEFORE committing that these exact paths exist:
 
-Commit all extracted Android project files to main and push.
+./settings.gradle.kts
+./build.gradle.kts
+./gradle.properties
+./app/build.gradle.kts
+./app/src/main/AndroidManifest.xml
 
-Then check the ACTUAL GitHub Actions run triggered by the push.
+5. Also verify that the Kotlin source files from the ZIP exist under:
+./app/src/main/
 
-Do not edit build-apk.yml.
+If any required file is missing, STOP and report the missing path.
+Do not invent replacement files.
 
-If the Android build fails, report the exact first Gradle/compiler error without modifying trading logic.
+6. Commit the extracted Android source files to branch main and push.
 
-If the build succeeds, verify that the APK artifact was actually uploaded.
+7. The existing GitHub Actions workflow should start automatically.
 
-Do not report success unless the APK exists.
+8. Open the ACTUAL new GitHub Actions run.
 
-Final response:
+If "Find Android project" succeeds, continue.
 
+If Gradle compilation fails:
+- inspect the FIRST real Gradle/compiler error;
+- fix ONLY the minimum source/build configuration required for compilation;
+- do NOT redesign or change trading behavior;
+- commit the fix and run Actions again.
+
+Repeat only for genuine build/compiler errors until the build succeeds.
+
+9. Confirm that the final job reaches:
+Build APK = SUCCESS
+Upload APK = SUCCESS
+
+10. Confirm the APK artifact actually exists.
+
+Do not claim success merely because files were committed.
+
+FINAL RESPONSE ONLY:
+
+SOURCE EXTRACTED: YES/NO
+SETTINGS: FOUND/MISSING
+APP MODULE: FOUND/MISSING
 COMMIT SHA:
-SOURCE IMPORTED: YES/NO
-settings.gradle.kts: FOUND/MISSING
-app/build.gradle.kts: FOUND/MISSING
-AndroidManifest.xml: FOUND/MISSING
-GITHUB ACTIONS: SUCCESS/FAILURE
-FIRST BUILD ERROR (if any):
-APK ARTIFACT (if successful):
+BUILD APK: SUCCESS/FAILURE
+UPLOAD APK: SUCCESS/FAILURE
+APK ARTIFACT: <exact artifact name or NONE>
+FIRST REMAINING ERROR: <exact error or NONE>
