@@ -12,13 +12,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Find and extract source ZIP
         shell: bash
@@ -30,13 +27,15 @@ jobs:
             | head -n 1)
 
           if [ -z "$ZIP" ]; then
-            echo "ERROR: 5M Specialist source ZIP not found."
+            echo "ERROR: LiveSignalAssistant_71.7.27_5M_SPECIALIST.zip not found."
             exit 1
           fi
 
           echo "SOURCE ZIP: $ZIP"
 
+          rm -rf "$RUNNER_TEMP/livesignal"
           mkdir -p "$RUNNER_TEMP/livesignal"
+
           unzip -q "$ZIP" -d "$RUNNER_TEMP/livesignal"
 
           SETTINGS=$(find "$RUNNER_TEMP/livesignal" -type f \
@@ -44,7 +43,7 @@ jobs:
             | head -n 1)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle/settings.gradle.kts not found."
+            echo "ERROR: settings.gradle or settings.gradle.kts not found."
             exit 1
           fi
 
@@ -66,6 +65,33 @@ jobs:
             \( -name "*.gradle" -o -name "*.gradle.kts" \) \
             -print
 
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set +e
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          SDKMANAGER=""
+
+          if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          elif [ -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          else
+            SDKMANAGER=$(find "$ANDROID_HOME" -type f -name sdkmanager 2>/dev/null | head -n 1)
+          fi
+
+          if [ -n "$SDKMANAGER" ]; then
+            echo "Using sdkmanager: $SDKMANAGER"
+            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          else
+            echo "sdkmanager not found; continuing to Gradle build."
+          fi
+
+          exit 0
+
       - name: Set up Gradle 8.10.2
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -78,6 +104,9 @@ jobs:
 
           cd "$PROJECT_DIR"
 
+          echo "Building project in:"
+          pwd
+
           if [ -f "./gradlew" ]; then
             chmod +x ./gradlew
             ./gradlew --no-daemon clean assembleDebug --stacktrace
@@ -85,24 +114,28 @@ jobs:
             gradle --no-daemon clean assembleDebug --stacktrace
           fi
 
-      - name: Verify APK
+      - name: Find and verify APK
         shell: bash
         run: |
           set -euo pipefail
 
-          APK=$(find "$PROJECT_DIR" -type f -path "*/build/outputs/apk/debug/*.apk" \
+          APK=$(find "$PROJECT_DIR" -type f \
+            -path "*/build/outputs/apk/debug/*.apk" \
             | head -n 1)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Build finished but APK was not found."
+            echo "ERROR: Build completed but debug APK was not found."
             exit 1
           fi
 
           echo "APK FOUND:"
+          echo "$APK"
           ls -lh "$APK"
 
           mkdir -p "$RUNNER_TEMP/final-apk"
-          cp "$APK" "$RUNNER_TEMP/final-apk/LiveSignalAssistant-5M-Specialist-debug.apk"
+
+          cp "$APK" \
+            "$RUNNER_TEMP/final-apk/LiveSignalAssistant-5M-Specialist-debug.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
