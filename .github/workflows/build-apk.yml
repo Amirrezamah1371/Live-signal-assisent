@@ -1,176 +1,118 @@
-Use ONLY the attached file:
+name: Build 90S Experience Brain
 
-LiveSignalAssistant_71.7.27_90S_EXPERIENCE_BRAIN.zip
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-This ZIP is the COMPLETE Android source project.
+permissions:
+  contents: read
 
-DO NOT redesign, rewrite, simplify, optimize, or change the application logic.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-Your job is ONLY to validate the Android project, fix genuine compilation/build errors if any, build it, and return the APK.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-CRITICAL:
-DO NOT paste this prompt or any natural-language instructions into ANY project file.
-DO NOT modify .github/workflows/build-apk.yml with this prompt.
-DO NOT put explanatory text inside YAML, Kotlin, Gradle, XML, or other source files.
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-PRESERVE ALL EXISTING FEATURES AND LOGIC EXACTLY, INCLUDING:
+      - name: Extract source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-- Version 71.7.27 architecture
-- 90-second analysis cycle
-- First 80 seconds = DEEP OBSERVATION
-- Final 10 seconds = FINAL DECISION WINDOW
-- Analysis continues during the final 10 seconds
-- 1-minute trade expiry
-- Expiry starts only when the user manually LOCKS/OPENS the signal
-- Existing Direction Brain
-- Existing Final Brain
-- Existing sudden-change detection
-- 3s / 6s / 10s / 20s trajectory analysis
-- counter-magnitude
-- persistence-decay
-- acceleration / jerk analysis
-- multi-window confirmation
-- single-spike rejection
-- UP / DOWN / WAIT
-- overlay UI
-- manual signal execution
-- WIN / LOSS / VOID buttons
-- Memory system
-- screenshots
-- observations
-- session logging
-- Export ZIP
-- stale-cycle protection
+          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*90S_EXPERIENCE_BRAIN*.zip' -print -quit)"
 
-MOST IMPORTANT:
-PRESERVE THE NEW PERMANENT EXPERIENCE BRAIN COMPLETELY.
+          if [ -z "$ZIP" ]; then
+            echo "::error::90S EXPERIENCE BRAIN ZIP not found in repository root"
+            exit 1
+          fi
 
-The project contains:
+          DEST="$RUNNER_TEMP/experience-brain-90s"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
 
-ExperienceStore.kt
+          unzip -q "$ZIP" -d "$DEST"
 
-It is intentional and MUST NOT be removed, bypassed, reset, rewritten, or disconnected.
+          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
 
-EXPERIENCE BEHAVIOR MUST REMAIN:
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle or settings.gradle.kts not found"
+            exit 1
+          fi
 
-1. Manually confirmed WIN results are learned.
-2. Manually confirmed LOSS results are learned.
-3. VOID does NOT train the Experience Brain.
-4. Experience is stored separately from Session Memory.
-5. Clearing Session Memory MUST NEVER delete Experience data.
-6. Exporting Session Memory MUST NEVER delete Experience data.
-7. Experience persists across normal app restarts.
-8. Experience persists across normal APK updates using the same applicationId.
-9. Experience contains compact numeric/statistical profiles, NOT screenshots.
-10. Experience is used in future decisions only when enough comparable historical evidence exists.
-11. Sparse experience must NOT overpower the deterministic Direction/Final Brain.
-12. A single WIN or LOSS must NOT cause a direction change.
-13. Experience learning must remain gradual and evidence-based.
-14. Existing bounded-profile storage must remain intact.
-15. Every memory export must include:
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
-experience_snapshot/experience_v1.json
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project found at: $PROJECT_DIR"
 
-This exported snapshot is a COPY for audit/backup.
+      - name: Verify Experience Brain source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-Exporting or clearing Session Memory MUST NOT remove the live permanent Experience Core.
+          cd "$PROJECT_DIR"
 
-STORAGE REQUIREMENT:
+          test -f "app/src/main/java/com/example/livesignalassistant/CaptureService.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/SignalAnalyzer.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/MemoryStore.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt"
 
-Preserve the reduced screenshot-storage behavior.
+          grep -q 'com.example.livesignalassistant.finalbrain90' app/build.gradle.kts
+          grep -q 'permanent_experience/experience_v1.json' app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt
+          grep -q 'experience.learn' app/src/main/java/com/example/livesignalassistant/CaptureService.kt
+          grep -q 'experience_snapshot/experience_v1.json' app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt
 
-Heavy Session evidence is sampled approximately every 3 seconds.
+          echo "Experience Brain source verified."
 
-DO NOT increase screenshot frequency.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-Live analysis cadence must remain unchanged.
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-DO NOT ADD:
+          cd "$PROJECT_DIR"
 
-- martingale
-- automatic trading
-- automatic order execution
-- automatic stake sizing
-- signal quotas
-- forced number of signals
-- artificial cooldowns
-- fake win probabilities
-- guaranteed win-rate claims
-- destructive Experience reset
-- any button that clears Permanent Experience
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon clean assembleDebug --stacktrace
+          else
+            gradle --no-daemon clean assembleDebug --stacktrace
+          fi
 
-APPLICATION ID:
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-Preserve EXACTLY:
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-com.example.livesignalassistant.finalbrain90
+          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
 
-DO NOT change this applicationId.
+          if [ -z "$APK" ]; then
+            echo "::error::Built APK not found"
+            exit 1
+          fi
 
-Changing it would prevent this branch from using its existing persistent Experience data during future updates.
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN.apk"
 
-BUILD ENVIRONMENT:
+          echo "APK collected successfully."
 
-- JDK 17
-- Gradle 8.10.2
-- assembleDebug
-- Keep existing Android/Kotlin/Gradle versions unless a genuine compilation error requires a minimal fix.
-
-IMPORTANT GITHUB ACTIONS RULE:
-
-.github/workflows/build-apk.yml
-
-must contain ONLY valid GitHub Actions YAML.
-
-NEVER insert this prompt into build-apk.yml.
-
-NEVER insert Markdown or explanations into build-apk.yml.
-
-If the workflow already works, DO NOT rewrite it unnecessarily.
-
-VALIDATION BEFORE BUILD:
-
-Verify that these exist:
-
-settings.gradle.kts
-build.gradle.kts
-app/build.gradle.kts
-app/src/main/AndroidManifest.xml
-app/src/main/java/com/example/livesignalassistant/CaptureService.kt
-app/src/main/java/com/example/livesignalassistant/SignalAnalyzer.kt
-app/src/main/java/com/example/livesignalassistant/MemoryStore.kt
-app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt
-app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt
-
-Then verify:
-
-- ExperienceStore is actually connected to CaptureService.
-- WIN and LOSS call the learning system.
-- VOID does not train it.
-- Session clear touches only Session Memory.
-- Permanent Experience is not deleted by Session clear.
-- Export contains an Experience snapshot.
-- 90-second cycle is preserved.
-- 80s + 10s architecture is preserved.
-- 60-second trade expiry is preserved.
-- applicationId remains com.example.livesignalassistant.finalbrain90.
-
-BUILD:
-
-Run the equivalent of:
-
-gradle --no-daemon clean assembleDebug --stacktrace
-
-If compilation fails:
-Fix ONLY the genuine compilation error.
-Do NOT use a build error as a reason to redesign the project.
-
-FINAL OUTPUT:
-
-Return the successfully built DEBUG APK.
-
-Do NOT return a rewritten project unless a source fix was genuinely required.
-Do NOT create a different trading strategy.
-Do NOT remove the Experience Brain.
-Do NOT reset its architecture.
-Do NOT include this prompt inside any project file.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN
+          path: apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN.apk
+          if-no-files-found: error
