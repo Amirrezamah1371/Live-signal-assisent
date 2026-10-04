@@ -18,30 +18,89 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
+
+      - name: Show repository structure
+        shell: bash
+        run: |
+          echo "=== Repository root ==="
+          pwd
+          echo "=== Files ==="
+          find . -maxdepth 3 -type f | sort | head -300
+
+      - name: Locate Android project
+        id: locate
+        shell: bash
+        run: |
+          set -e
+
+          GRADLE_FILE="$(find . -type f \( \
+            -name 'settings.gradle' -o \
+            -name 'settings.gradle.kts' \
+          \) | head -1)"
+
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ERROR: No settings.gradle or settings.gradle.kts found."
+            echo "The Android project files are not extracted into the repository."
+            echo "Repository contents:"
+            find . -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$GRADLE_FILE")"
+
+          echo "Android project found at: $PROJECT_DIR"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Android project
+        shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: |
+          echo "=== Android project ==="
+          pwd
+          ls -la
+
+          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
+            echo "ERROR: settings.gradle/settings.gradle.kts missing."
+            exit 1
+          fi
+
+          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
+            echo "ERROR: Root build.gradle/build.gradle.kts missing."
+            exit 1
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Make Gradle wrapper executable
-        if: ${{ hashFiles('gradlew') != '' }}
-        run: chmod +x gradlew
+        shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: |
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            echo "Gradle wrapper found."
+          else
+            echo "WARNING: gradlew not found. Will try system Gradle."
+          fi
 
       - name: Build Debug APK
         shell: bash
+        working-directory: ${{ steps.locate.outputs.project_dir }}
         run: |
           set -e
 
           if [ -f "./gradlew" ]; then
-            ./gradlew --no-daemon clean assembleDebug
+            echo "Building with Gradle wrapper..."
+            ./gradlew --no-daemon clean assembleDebug --stacktrace
           elif command -v gradle >/dev/null 2>&1; then
-            gradle --no-daemon clean assembleDebug
+            echo "Building with system Gradle..."
+            gradle --no-daemon clean assembleDebug --stacktrace
           else
-            echo "ERROR: No Gradle wrapper or Gradle installation found."
+            echo "ERROR: Neither gradlew nor system Gradle is available."
             exit 1
           fi
 
@@ -49,14 +108,22 @@ jobs:
         if: success()
         shell: bash
         run: |
-          echo "Generated APK files:"
+          echo "=== Generated APK files ==="
+
+          APK_COUNT="$(find . -type f -name "*.apk" | wc -l)"
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERROR: Build completed but no APK was found."
+            exit 1
+          fi
+
           find . -type f -name "*.apk" -print
 
       - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-APK
+          name: LiveSignalAssistant-71.7.27-90S-Experience-V2
           path: |
             **/build/outputs/apk/**/*.apk
           if-no-files-found: error
