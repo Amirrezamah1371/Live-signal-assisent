@@ -1,186 +1,318 @@
-name: Build Live Signal Assistant APK
+Use this exact source archive as the authoritative project source:
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2_FIXED_R2.zip
 
-permissions:
-  contents: read
+IMPORTANT:
+Do NOT redesign, rewrite, simplify, optimize, or change the trading strategy or decision logic.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+The intended logic has already been implemented in this R2 source.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+Your job is ONLY to:
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+1. Extract this exact ZIP.
+2. Inspect the Android project.
+3. Compile it.
+4. Fix any REAL compilation, Kotlin syntax, Gradle, Android resource, manifest, dependency, database/schema, type mismatch, unresolved reference, or integration errors that prevent the project from building.
+5. Rebuild after every fix.
+6. Continue fixing errors until assembleDebug completes successfully.
+7. Produce the final working APK.
 
-      - name: Find and extract source ZIP
-        shell: bash
-        run: |
-          set -e
+DO NOT stop after finding the first compilation error.
 
-          ZIP_NAME="LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2_FIXED.zip"
+If the compiler reports another error after the first fix, fix that error too and rebuild.
 
-          echo "Looking for: $ZIP_NAME"
+Repeat:
 
-          ZIP_PATH="$(find . -type f -name "$ZIP_NAME" | head -1)"
+BUILD
+→ READ ACTUAL COMPILER ERROR
+→ FIX ONLY THAT ERROR
+→ BUILD AGAIN
 
-          if [ -z "$ZIP_PATH" ]; then
-            echo "ERROR: Source ZIP not found."
-            echo ""
-            echo "ZIP files currently in repository:"
-            find . -type f -iname "*.zip" -print
-            exit 1
-          fi
+until:
 
-          echo "Found source ZIP:"
-          echo "$ZIP_PATH"
+BUILD SUCCESSFUL
 
-          rm -rf extracted_source
-          mkdir -p extracted_source
+==================================================
+STRICT SOURCE-PRESERVATION RULE
+==================================================
 
-          unzip -q "$ZIP_PATH" -d extracted_source
+Do NOT replace the application with another version.
 
-          echo "=== Extracted source ==="
-          find extracted_source -maxdepth 4 -type f | sort | head -300
+Do NOT restore older experimental code.
 
-      - name: Locate Android project
-        id: locate
-        shell: bash
-        run: |
-          set -e
+Do NOT generate a new Android project.
 
-          SETTINGS_FILE="$(find extracted_source -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) | head -1)"
+Do NOT replace SignalAnalyzer.
 
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android project not found inside ZIP."
-            echo ""
-            echo "Extracted files:"
-            find extracted_source -type f | sort
-            exit 1
-          fi
+Do NOT replace CaptureService.
 
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+Do NOT remove ExperienceStore.
 
-          echo "Android project found:"
-          echo "$PROJECT_DIR"
+Do NOT remove existing functionality just to make compilation succeed.
 
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+Do NOT comment out or disable features merely to get a green build.
 
-      - name: Verify Android project
-        shell: bash
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: |
-          set -e
+Fix the implementation correctly.
 
-          echo "=== PROJECT DIRECTORY ==="
-          pwd
-          ls -la
+==================================================
+THE FOLLOWING IMPLEMENTED BEHAVIOR MUST REMAIN
+==================================================
 
-          echo "=== GRADLE FILES ==="
-          find . -maxdepth 3 -type f \( \
-            -name "*.gradle" -o \
-            -name "*.gradle.kts" -o \
-            -name "gradle-wrapper.properties" \
-          \) -print
+Preserve the 71.7.27 ADAPTIVE_RECENCY base decision engine.
 
-          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
-            echo "ERROR: settings.gradle missing."
-            exit 1
-          fi
+Preserve the intended 90-second cycle:
 
-          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
-            echo "ERROR: root build.gradle missing."
-            exit 1
-          fi
+80 seconds:
+market observation and accumulated analysis
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
++
 
-      - name: Prepare Gradle
-        shell: bash
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: |
-          set -e
+10 seconds:
+final validation / signal decision
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "Gradle Wrapper found."
-            ./gradlew --version
-          else
-            echo "Gradle Wrapper not found."
-            echo "System Gradle will be used."
-            gradle --version
-          fi
+Preserve:
 
-      - name: Build Debug APK
-        shell: bash
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: |
-          set -e
+ONE DECISION PER CYCLE
 
-          echo "Starting Android build..."
+UP / DOWN / WAIT
 
-          if [ -f "./gradlew" ]; then
-            ./gradlew \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace
-          else
-            gradle \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace
-          fi
+Preserve late-entry and exhaustion protection.
 
-      - name: Locate generated APK
-        id: apk
-        shell: bash
-        run: |
-          set -e
+Preserve shock / sudden-movement / regime-change protection.
 
-          echo "Searching for generated APK..."
+Preserve the rule that a normal short pullback during the final 10 seconds must NOT casually reverse the accumulated direction from the previous 80 seconds.
 
-          APK_PATH="$(find extracted_source \
-            -type f \
-            -path "*/build/outputs/apk/*" \
-            -name "*.apk" \
-            | head -1)"
+A direction reversal during final validation requires strong multi-factor evidence of a genuine regime change.
 
-          if [ -z "$APK_PATH" ]; then
-            echo "ERROR: Build finished but APK was not found."
-            find extracted_source -type f -name "*.apk" -print
-            exit 1
-          fi
+Preserve separation between:
 
-          echo "APK FOUND:"
-          echo "$APK_PATH"
+DIRECTION QUALITY
 
-          mkdir -p final_apk
+and
 
-          cp "$APK_PATH" \
-            "final_apk/LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2.apk"
+ENTRY QUALITY.
 
-          ls -lh final_apk/
+A strong trend with poor/late entry timing may result in WAIT.
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-71.7.27-90S-Experience-V2
-          path: final_apk/LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2.apk
-          if-no-files-found: error
-          retention-days: 30
+It must not automatically reverse direction.
+
+==================================================
+EXPERIENCE V2 MUST REMAIN
+==================================================
+
+Preserve the similarity-based Experience V2 system included in R2.
+
+Experience should retrieve SIMILAR historical setups rather than requiring exact setup equality.
+
+Experience must remain an advisory layer.
+
+It must NOT become the primary direction engine.
+
+Experience must NEVER directly change:
+
+UP → DOWN
+
+or
+
+DOWN → UP.
+
+If historical experience strongly indicates that the proposed entry conditions repeatedly performed poorly, it may reduce setup quality or produce WAIT.
+
+Experience must learn setup conditions, not directional prejudice.
+
+Small historical sample sizes must have small influence.
+
+Influence may increase gradually as reliable similar completed-trade evidence accumulates.
+
+==================================================
+PERMANENT EXPERIENCE
+==================================================
+
+Preserve separation between:
+
+RAW SESSION MEMORY
+
+and
+
+PERMANENT LEARNED EXPERIENCE.
+
+Exporting or clearing bulky raw session memory/screenshots must NOT erase learned Experience.
+
+Permanent Experience should survive:
+
+app restart
+phone restart
+session export
+raw-memory cleanup
+
+Permanent Experience must remain compact and must not indefinitely store all screenshots.
+
+==================================================
+TRADE RESULTS
+==================================================
+
+Only genuinely executed trades with recorded outcomes should affect learning.
+
+WIN = positive evidence
+
+LOSS = negative evidence
+
+VOID = neutral / excluded
+
+Unexecuted/timeout signals must NOT be counted as WIN or LOSS.
+
+==================================================
+SIGNAL SYSTEM
+==================================================
+
+Preserve:
+
+floating overlay
+screen capture
+signal bubble
+Signal Lock
+expiry timer
+WIN / LOSS / VOID controls
+memory export
+existing permissions
+existing Android UI
+
+Do NOT reintroduce 30-second expiry.
+
+Do NOT introduce:
+
+signal quotas
+daily limits
+hourly limits
+arbitrary cooldowns
+
+Do NOT make the robot artificially silent merely to increase apparent win rate.
+
+==================================================
+KNOWN PREVIOUS COMPILATION ISSUE
+==================================================
+
+The previous source revision failed compilation in:
+
+ExperienceStore.kt
+
+around line 78.
+
+The compiler reported errors including:
+
+Function 'stats' without a body must be abstract
+
+and subsequent Kotlin syntax errors.
+
+R2 contains a correction for that problem.
+
+Verify that ExperienceStore.kt is syntactically valid before building.
+
+If another syntax/type error remains in ExperienceStore.kt, correct it while preserving its intended Experience V2 behavior.
+
+Do NOT delete ExperienceStore or bypass Experience V2 to make the project compile.
+
+==================================================
+BUILD PROCEDURE
+==================================================
+
+Use JDK 17.
+
+Locate the actual Android project inside the extracted archive.
+
+Use the included Gradle Wrapper when available.
+
+Run:
+
+./gradlew clean assembleDebug --stacktrace
+
+If compilation fails:
+
+Read the FIRST real compiler error.
+
+Fix its actual source cause.
+
+Run the build again.
+
+Continue until all compilation errors are resolved.
+
+Do not treat:
+
+"Process completed with exit code 1"
+
+as the actual error.
+
+Inspect the earlier compiler output and identify the real Kotlin/Gradle error.
+
+Do not stop at warnings.
+
+Warnings that do not prevent compilation do not require destructive code changes.
+
+==================================================
+FINAL VERIFICATION
+==================================================
+
+Before declaring success, verify:
+
+1. Kotlin compilation succeeds.
+2. Android resource processing succeeds.
+3. Manifest processing succeeds.
+4. ExperienceStore compiles.
+5. CaptureService compiles.
+6. SignalAnalyzer compiles.
+7. Database/storage code compiles.
+8. 90-second cycle code is present.
+9. 80s observation + 10s final validation remains present.
+10. Experience V2 remains connected to the decision pipeline.
+11. Experience cannot directly flip UP/DOWN.
+12. Permanent Experience storage remains separate from raw-memory cleanup.
+13. Signal Lock remains functional in code.
+14. WIN/LOSS/VOID flow remains present.
+15. assembleDebug finishes with BUILD SUCCESSFUL.
+16. A real .apk file exists under build/outputs/apk/.
+
+==================================================
+FINAL OUTPUT
+==================================================
+
+Do not respond with only an explanation.
+
+Complete the work.
+
+The task is finished ONLY when the project builds successfully.
+
+At the end report:
+
+BUILD STATUS:
+BUILD SUCCESSFUL or BUILD FAILED
+
+APK FILE:
+exact filename
+
+APK PATH:
+exact artifact path
+
+COMPILATION ERRORS FIXED:
+list the actual errors fixed
+
+FILES MODIFIED:
+list exact files
+
+LOGIC CHANGES:
+should be NONE except changes strictly necessary to correctly integrate/fix the already intended R2 implementation
+
+EXPERIENCE V2:
+CONFIRMED / NOT CONFIRMED
+
+90-SECOND CYCLE:
+CONFIRMED / NOT CONFIRMED
+
+PERMANENT EXPERIENCE:
+CONFIRMED / NOT CONFIRMED
+
+SIGNAL LOCK:
+CONFIRMED / NOT CONFIRMED
+
+Do not claim success unless assembleDebug actually completed successfully and the APK file actually exists.
+
+Build the R2 source now.
