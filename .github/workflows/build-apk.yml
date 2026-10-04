@@ -1,235 +1,87 @@
-name: Build Live Signal Assistant R3
+Use ONLY the attached source ZIP:
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+LiveSignalAssistant_71.7.27_5M_SPECIALIST.zip
 
-permissions:
-  contents: read
+Your job is to build the Android project into a working APK.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+IMPORTANT:
+- Do NOT redesign the trading logic.
+- Do NOT rewrite or simplify the 5M Specialist architecture.
+- Do NOT change the signal algorithm, thresholds, observation windows, Final Brain, Entry Quality logic, Experience logic, chart extraction logic, or timing unless a change is strictly required to fix a compilation/runtime error.
+- Preserve the existing applicationId so this can update the previous installation.
+- Preserve the existing persistent 5M Experience storage.
+- Do NOT add any Experience reset button.
+- Do NOT convert this back to a 1-minute system.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+The intended architecture must remain:
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+- Single trading horizon: 5 minutes only.
+- Total analysis cycle: 360 seconds.
+- First 300 seconds: context/deep observation.
+- Final 60 seconds: Final Brain with stronger recency/change-point analysis.
+- Continue analyzing during the Final Brain window.
+- Produce only ONE final decision per completed cycle: UP, DOWN, or WAIT.
+- Manual Lock/Entry starts the trade timer.
+- Expiry after Lock/Entry: exactly 300 seconds.
+- Use monotonic timing.
+- Preserve multi-window analysis including 15s, 30s, 60s, 120s and 240s information.
+- Preserve sudden-change/change-point detection.
+- Preserve the separation between Direction prediction and Entry Quality.
+- Preserve the improved chart-trace extraction logic.
+- Preserve the dedicated 5M Experience system. Do not mix old 1M outcomes into 5M learning.
+- Preserve WIN / LOSS / VOID result recording.
+- Preserve session memory/export functionality.
 
-      - name: Find R3 source ZIP
-        id: source
-        shell: bash
-        run: |
-          set -e
+Before building, inspect the entire project for:
+- Kotlin compilation errors
+- malformed syntax
+- missing imports
+- unresolved references
+- Gradle/plugin incompatibilities
+- Android manifest errors
+- package/applicationId inconsistencies
+- resource errors
+- timing bugs
+- nullability/type errors
+- dead feature wiring
+- ExperienceStore integration errors
+- CaptureService/SignalAnalyzer/Final Brain integration errors
 
-          ZIP_NAME="LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2_SEPARATE_R3.zip"
+If you find a compile error:
+1. Identify the exact root cause.
+2. Make the smallest technically correct fix.
+3. Do not remove functionality merely to make the project compile.
+4. Rebuild.
+5. Repeat until the Android debug APK builds successfully.
 
-          echo "Searching for:"
-          echo "$ZIP_NAME"
+Also verify that the important Final Brain features are actually receiving live/non-dead inputs rather than silently remaining zero.
 
-          ZIP_PATH="$(find . -type f -name "$ZIP_NAME" | head -1)"
+Do not paste this prompt or any natural-language instructions into build-apk.yml.
 
-          if [ -z "$ZIP_PATH" ]; then
-            echo "ERROR: R3 source ZIP was not found."
-            echo ""
-            echo "Available ZIP files:"
-            find . -type f -iname "*.zip" -print
-            exit 1
-          fi
+If a GitHub Actions workflow is required, create a CLEAN VALID YAML workflow only. It must contain YAML and shell commands, never explanatory prose.
 
-          echo "FOUND:"
-          echo "$ZIP_PATH"
+Use:
+- JDK 17
+- a Gradle/Android configuration compatible with the supplied project
+- assembleDebug
 
-          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+At the end:
 
-      - name: Extract R3 source
-        shell: bash
-        run: |
-          set -e
+1. Confirm whether compilation actually succeeded.
+2. Report every source file you changed and why.
+3. Report any remaining technical concern honestly.
+4. Confirm the final applicationId.
+5. Confirm the 360-second analysis cycle.
+6. Confirm the 300-second post-Lock expiry.
+7. Confirm that the 5M Experience survives normal session clearing.
+8. Confirm that old 1M Experience is not used to train 5M decisions.
+9. Confirm that no trading logic was silently removed.
+10. Provide the final complete source ZIP.
+11. Provide the generated APK if the environment allows it.
+12. Provide a clean build-apk.yml if GitHub Actions is needed.
 
-          rm -rf extracted_source
-          mkdir -p extracted_source
+Do not claim that something was tested unless you actually tested it.
 
-          unzip -q "${{ steps.source.outputs.zip_path }}" \
-            -d extracted_source
+Do not claim the APK builds successfully unless a real build completed successfully.
 
-          echo "R3 source extracted successfully."
-
-      - name: Locate Android project
-        id: project
-        shell: bash
-        run: |
-          set -e
-
-          SETTINGS_FILE="$(find extracted_source -type f \( \
-            -name "settings.gradle" -o \
-            -name "settings.gradle.kts" \
-          \) | head -1)"
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Android project not found inside R3 ZIP."
-            echo ""
-            echo "Extracted files:"
-            find extracted_source -type f | sort
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
-
-          echo "Android project located at:"
-          echo "$PROJECT_DIR"
-
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Verify R3 package configuration
-        shell: bash
-        working-directory: ${{ steps.project.outputs.project_dir }}
-        run: |
-          set -e
-
-          echo "=== PROJECT ==="
-          pwd
-          ls -la
-
-          if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
-            echo "ERROR: settings.gradle missing."
-            exit 1
-          fi
-
-          if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
-            echo "ERROR: root build.gradle missing."
-            exit 1
-          fi
-
-          echo ""
-          echo "=== CHECKING R3 APPLICATION ID ==="
-
-          if grep -R \
-            "com.example.livesignalassistant.recency71727expv2r3" \
-            app/build.gradle* >/dev/null 2>&1; then
-
-            echo "R3 independent applicationId confirmed."
-
-          else
-            echo "ERROR: Independent R3 applicationId was not found."
-            echo "Refusing to build an APK that may overwrite the old app."
-            exit 1
-          fi
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Prepare Gradle
-        shell: bash
-        working-directory: ${{ steps.project.outputs.project_dir }}
-        run: |
-          set -e
-
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "Using project Gradle Wrapper."
-            ./gradlew --version
-          else
-            echo "Gradle Wrapper not found."
-            echo "Using system Gradle."
-            gradle --version
-          fi
-
-      - name: Build R3 Debug APK
-        shell: bash
-        working-directory: ${{ steps.project.outputs.project_dir }}
-        run: |
-          set -o pipefail
-
-          echo "========================================"
-          echo "BUILDING R3"
-          echo "========================================"
-
-          if [ -f "./gradlew" ]; then
-            ./gradlew \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace \
-              2>&1 | tee build-r3.log
-          else
-            gradle \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace \
-              2>&1 | tee build-r3.log
-          fi
-
-      - name: Show real compiler errors
-        if: failure()
-        shell: bash
-        working-directory: ${{ steps.project.outputs.project_dir }}
-        run: |
-          echo "========================================"
-          echo "REAL BUILD / COMPILER ERRORS"
-          echo "========================================"
-
-          if [ -f "build-r3.log" ]; then
-
-            grep -n -E \
-              "(^e:|error:|Syntax error|Unresolved reference|Type mismatch|Compilation error|Execution failed for task|What went wrong|FAILURE:|Manifest merger failed|Android resource linking failed)" \
-              build-r3.log \
-              | head -200 || true
-
-            echo ""
-            echo "========================================"
-            echo "LAST 200 BUILD LOG LINES"
-            echo "========================================"
-
-            tail -200 build-r3.log
-
-          else
-            echo "build-r3.log was not created."
-          fi
-
-      - name: Find R3 APK
-        id: apk
-        if: success()
-        shell: bash
-        run: |
-          set -e
-
-          APK_PATH="$(find extracted_source \
-            -type f \
-            -path "*/build/outputs/apk/*" \
-            -name "*.apk" \
-            | head -1)"
-
-          if [ -z "$APK_PATH" ]; then
-            echo "ERROR: Build succeeded but APK was not found."
-            exit 1
-          fi
-
-          echo "APK FOUND:"
-          echo "$APK_PATH"
-
-          mkdir -p final_apk
-
-          cp "$APK_PATH" \
-            "final_apk/TraderRobot_71.7.27_90S_Experience_V2_R3.apk"
-
-          echo ""
-          echo "=== FINAL R3 APK ==="
-          ls -lh final_apk/
-
-      - name: Upload R3 APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: TraderRobot-71.7.27-90S-Experience-V2-R3
-          path: final_apk/TraderRobot_71.7.27_90S_Experience_V2_R3.apk
-          if-no-files-found: error
-          retention-days: 30
+This is a compile, integration, and verification task — not a redesign task.
