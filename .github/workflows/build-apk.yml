@@ -1,87 +1,113 @@
-Use ONLY the attached source ZIP:
+name: Build 5M Specialist APK
 
-LiveSignalAssistant_71.7.27_5M_SPECIALIST.zip
+on:
+  workflow_dispatch:
 
-Your job is to build the Android project into a working APK.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-IMPORTANT:
-- Do NOT redesign the trading logic.
-- Do NOT rewrite or simplify the 5M Specialist architecture.
-- Do NOT change the signal algorithm, thresholds, observation windows, Final Brain, Entry Quality logic, Experience logic, chart extraction logic, or timing unless a change is strictly required to fix a compilation/runtime error.
-- Preserve the existing applicationId so this can update the previous installation.
-- Preserve the existing persistent 5M Experience storage.
-- Do NOT add any Experience reset button.
-- Do NOT convert this back to a 1-minute system.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-The intended architecture must remain:
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-- Single trading horizon: 5 minutes only.
-- Total analysis cycle: 360 seconds.
-- First 300 seconds: context/deep observation.
-- Final 60 seconds: Final Brain with stronger recency/change-point analysis.
-- Continue analyzing during the Final Brain window.
-- Produce only ONE final decision per completed cycle: UP, DOWN, or WAIT.
-- Manual Lock/Entry starts the trade timer.
-- Expiry after Lock/Entry: exactly 300 seconds.
-- Use monotonic timing.
-- Preserve multi-window analysis including 15s, 30s, 60s, 120s and 240s information.
-- Preserve sudden-change/change-point detection.
-- Preserve the separation between Direction prediction and Entry Quality.
-- Preserve the improved chart-trace extraction logic.
-- Preserve the dedicated 5M Experience system. Do not mix old 1M outcomes into 5M learning.
-- Preserve WIN / LOSS / VOID result recording.
-- Preserve session memory/export functionality.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-Before building, inspect the entire project for:
-- Kotlin compilation errors
-- malformed syntax
-- missing imports
-- unresolved references
-- Gradle/plugin incompatibilities
-- Android manifest errors
-- package/applicationId inconsistencies
-- resource errors
-- timing bugs
-- nullability/type errors
-- dead feature wiring
-- ExperienceStore integration errors
-- CaptureService/SignalAnalyzer/Final Brain integration errors
+      - name: Find and extract source ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
 
-If you find a compile error:
-1. Identify the exact root cause.
-2. Make the smallest technically correct fix.
-3. Do not remove functionality merely to make the project compile.
-4. Rebuild.
-5. Repeat until the Android debug APK builds successfully.
+          ZIP=$(find "$GITHUB_WORKSPACE" -type f \
+            -name "LiveSignalAssistant_71.7.27_5M_SPECIALIST.zip" \
+            | head -n 1)
 
-Also verify that the important Final Brain features are actually receiving live/non-dead inputs rather than silently remaining zero.
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: 5M Specialist source ZIP not found."
+            exit 1
+          fi
 
-Do not paste this prompt or any natural-language instructions into build-apk.yml.
+          echo "SOURCE ZIP: $ZIP"
 
-If a GitHub Actions workflow is required, create a CLEAN VALID YAML workflow only. It must contain YAML and shell commands, never explanatory prose.
+          mkdir -p "$RUNNER_TEMP/livesignal"
+          unzip -q "$ZIP" -d "$RUNNER_TEMP/livesignal"
 
-Use:
-- JDK 17
-- a Gradle/Android configuration compatible with the supplied project
-- assembleDebug
+          SETTINGS=$(find "$RUNNER_TEMP/livesignal" -type f \
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            | head -n 1)
 
-At the end:
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle/settings.gradle.kts not found."
+            exit 1
+          fi
 
-1. Confirm whether compilation actually succeeded.
-2. Report every source file you changed and why.
-3. Report any remaining technical concern honestly.
-4. Confirm the final applicationId.
-5. Confirm the 360-second analysis cycle.
-6. Confirm the 300-second post-Lock expiry.
-7. Confirm that the 5M Experience survives normal session clearing.
-8. Confirm that old 1M Experience is not used to train 5M decisions.
-9. Confirm that no trading logic was silently removed.
-10. Provide the final complete source ZIP.
-11. Provide the generated APK if the environment allows it.
-12. Provide a clean build-apk.yml if GitHub Actions is needed.
+          PROJECT_DIR=$(dirname "$SETTINGS")
 
-Do not claim that something was tested unless you actually tested it.
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID PROJECT: $PROJECT_DIR"
 
-Do not claim the APK builds successfully unless a real build completed successfully.
+      - name: Show project information
+        shell: bash
+        run: |
+          set -euo pipefail
 
-This is a compile, integration, and verification task — not a redesign task.
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          echo "Gradle files:"
+          find "$PROJECT_DIR" -maxdepth 3 -type f \
+            \( -name "*.gradle" -o -name "*.gradle.kts" \) \
+            -print
+
+      - name: Set up Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon clean assembleDebug --stacktrace
+          else
+            gradle --no-daemon clean assembleDebug --stacktrace
+          fi
+
+      - name: Verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK=$(find "$PROJECT_DIR" -type f -path "*/build/outputs/apk/debug/*.apk" \
+            | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: Build finished but APK was not found."
+            exit 1
+          fi
+
+          echo "APK FOUND:"
+          ls -lh "$APK"
+
+          mkdir -p "$RUNNER_TEMP/final-apk"
+          cp "$APK" "$RUNNER_TEMP/final-apk/LiveSignalAssistant-5M-Specialist-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-5M-Specialist
+          path: ${{ runner.temp }}/final-apk/LiveSignalAssistant-5M-Specialist-debug.apk
+          if-no-files-found: error
+          retention-days: 7
