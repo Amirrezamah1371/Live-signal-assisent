@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Live Signal Assistant APK
 
 on:
   workflow_dispatch:
@@ -23,13 +23,35 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Show repository structure
+      - name: Find and extract source ZIP
         shell: bash
         run: |
-          echo "=== Repository root ==="
-          pwd
-          echo "=== Files ==="
-          find . -maxdepth 3 -type f | sort | head -300
+          set -e
+
+          ZIP_NAME="LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2_FIXED.zip"
+
+          echo "Looking for: $ZIP_NAME"
+
+          ZIP_PATH="$(find . -type f -name "$ZIP_NAME" | head -1)"
+
+          if [ -z "$ZIP_PATH" ]; then
+            echo "ERROR: Source ZIP not found."
+            echo ""
+            echo "ZIP files currently in repository:"
+            find . -type f -iname "*.zip" -print
+            exit 1
+          fi
+
+          echo "Found source ZIP:"
+          echo "$ZIP_PATH"
+
+          rm -rf extracted_source
+          mkdir -p extracted_source
+
+          unzip -q "$ZIP_PATH" -d extracted_source
+
+          echo "=== Extracted source ==="
+          find extracted_source -maxdepth 4 -type f | sort | head -300
 
       - name: Locate Android project
         id: locate
@@ -37,54 +59,70 @@ jobs:
         run: |
           set -e
 
-          GRADLE_FILE="$(find . -type f \( \
-            -name 'settings.gradle' -o \
-            -name 'settings.gradle.kts' \
+          SETTINGS_FILE="$(find extracted_source -type f \( \
+            -name "settings.gradle" -o \
+            -name "settings.gradle.kts" \
           \) | head -1)"
 
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ERROR: No settings.gradle or settings.gradle.kts found."
-            echo "The Android project files are not extracted into the repository."
-            echo "Repository contents:"
-            find . -maxdepth 4 -type f | sort
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: Android project not found inside ZIP."
+            echo ""
+            echo "Extracted files:"
+            find extracted_source -type f | sort
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$GRADLE_FILE")"
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
 
-          echo "Android project found at: $PROJECT_DIR"
+          echo "Android project found:"
+          echo "$PROJECT_DIR"
+
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Verify Android project
         shell: bash
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: |
-          echo "=== Android project ==="
+          set -e
+
+          echo "=== PROJECT DIRECTORY ==="
           pwd
           ls -la
 
+          echo "=== GRADLE FILES ==="
+          find . -maxdepth 3 -type f \( \
+            -name "*.gradle" -o \
+            -name "*.gradle.kts" -o \
+            -name "gradle-wrapper.properties" \
+          \) -print
+
           if [ ! -f "settings.gradle" ] && [ ! -f "settings.gradle.kts" ]; then
-            echo "ERROR: settings.gradle/settings.gradle.kts missing."
+            echo "ERROR: settings.gradle missing."
             exit 1
           fi
 
           if [ ! -f "build.gradle" ] && [ ! -f "build.gradle.kts" ]; then
-            echo "ERROR: Root build.gradle/build.gradle.kts missing."
+            echo "ERROR: root build.gradle missing."
             exit 1
           fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Make Gradle wrapper executable
+      - name: Prepare Gradle
         shell: bash
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: |
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-            echo "Gradle wrapper found."
+          set -e
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "Gradle Wrapper found."
+            ./gradlew --version
           else
-            echo "WARNING: gradlew not found. Will try system Gradle."
+            echo "Gradle Wrapper not found."
+            echo "System Gradle will be used."
+            gradle --version
           fi
 
       - name: Build Debug APK
@@ -93,38 +131,56 @@ jobs:
         run: |
           set -e
 
+          echo "Starting Android build..."
+
           if [ -f "./gradlew" ]; then
-            echo "Building with Gradle wrapper..."
-            ./gradlew --no-daemon clean assembleDebug --stacktrace
-          elif command -v gradle >/dev/null 2>&1; then
-            echo "Building with system Gradle..."
-            gradle --no-daemon clean assembleDebug --stacktrace
+            ./gradlew \
+              --no-daemon \
+              clean \
+              assembleDebug \
+              --stacktrace
           else
-            echo "ERROR: Neither gradlew nor system Gradle is available."
-            exit 1
+            gradle \
+              --no-daemon \
+              clean \
+              assembleDebug \
+              --stacktrace
           fi
 
-      - name: Find generated APK
-        if: success()
+      - name: Locate generated APK
+        id: apk
         shell: bash
         run: |
-          echo "=== Generated APK files ==="
+          set -e
 
-          APK_COUNT="$(find . -type f -name "*.apk" | wc -l)"
+          echo "Searching for generated APK..."
 
-          if [ "$APK_COUNT" -eq 0 ]; then
-            echo "ERROR: Build completed but no APK was found."
+          APK_PATH="$(find extracted_source \
+            -type f \
+            -path "*/build/outputs/apk/*" \
+            -name "*.apk" \
+            | head -1)"
+
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: Build finished but APK was not found."
+            find extracted_source -type f -name "*.apk" -print
             exit 1
           fi
 
-          find . -type f -name "*.apk" -print
+          echo "APK FOUND:"
+          echo "$APK_PATH"
 
-      - name: Upload APK artifact
-        if: success()
+          mkdir -p final_apk
+
+          cp "$APK_PATH" \
+            "final_apk/LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2.apk"
+
+          ls -lh final_apk/
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: LiveSignalAssistant-71.7.27-90S-Experience-V2
-          path: |
-            **/build/outputs/apk/**/*.apk
+          path: final_apk/LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2.apk
           if-no-files-found: error
           retention-days: 30
