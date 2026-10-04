@@ -1,107 +1,92 @@
-Use ONLY the attached source project:
+name: Build 90S Final Brain
 
-LiveSignalAssistant_71.7.27_90S_FINAL_BRAIN.zip
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-This ZIP is the complete Android SOURCE PROJECT.
+permissions:
+  contents: read
 
-TASK:
-Validate the project and return ONE complete build-ready source ZIP.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-IMPORTANT:
-Do NOT redesign, rewrite, optimize, simplify, or alter the trading/analysis logic.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-PRESERVE EXACTLY:
-- 90-second decision cycle
-- First 80 seconds = Deep Observation
-- Final 10 seconds = Final Decision Window
-- Analysis must continue during the final 10 seconds
-- 3s / 6s / 10s / 20s trajectory analysis
-- persistence-decay detection
-- sustained counter-move detection
-- trajectory acceleration / jerk analysis
-- multi-window confirmation
-- single-spike rejection
-- existing Direction Engine
-- existing UP / DOWN / WAIT behavior
-- fixed 60-second trade expiry starting from user LOCK/OPEN
-- overlay UI
-- manual LOCK/OPEN
-- WIN / LOSS / VOID
-- Memory system
-- screenshots / observations
-- session logging
-- Memory ZIP export
-- stale-cycle / lag protection
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-DO NOT ADD:
-- signal quotas
-- forced signal counts
-- cooldowns
-- extra WAIT restrictions
-- martingale
-- automatic trading
-- automatic stake sizing
-- fake probability or win-rate claims
+      - name: Extract source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-INSTALLATION REQUIREMENT:
-This version MUST remain installable alongside the previous Adaptive Recency version.
+          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*90S_FINAL_BRAIN*.zip' -print -quit)"
 
-Preserve this applicationId exactly:
+          if [ -z "$ZIP" ]; then
+            echo "::error::90S FINAL BRAIN ZIP not found"
+            exit 1
+          fi
 
-com.example.livesignalassistant.finalbrain90
+          DEST="$RUNNER_TEMP/final-brain-90s"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
+          unzip -q "$ZIP" -d "$DEST"
 
-Do NOT change it to the previous application's package ID.
+          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
 
-BUILD REQUIREMENTS:
-- JDK 17
-- Use the existing Gradle / Android configuration
-- Do NOT unnecessarily upgrade Gradle, AGP, Kotlin, SDK, or dependencies
-- Build target: assembleDebug
-- Fix ONLY genuine compilation/build errors
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::settings.gradle not found"
+            exit 1
+          fi
 
-GITHUB ACTIONS REQUIREMENT:
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-The file:
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-.github/workflows/build-apk.yml
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
 
-MUST contain ONLY valid GitHub Actions YAML.
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
 
-ABSOLUTELY DO NOT paste this prompt, TASK text, instructions, explanations, Markdown, or other prose into build-apk.yml.
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-If the existing build-apk.yml is already valid, KEEP IT.
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-If it must be repaired, it must remain a normal GitHub Actions workflow that:
-1. checks out the repository
-2. sets up JDK 17
-3. sets up Gradle 8.10.2
-4. runs:
-   gradle --no-daemon clean assembleDebug --stacktrace
-5. uploads:
-   app/build/outputs/apk/debug/app-debug.apk
+          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
 
-Before returning the project, verify:
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found"
+            exit 1
+          fi
 
-1. settings.gradle.kts exists
-2. build.gradle.kts exists
-3. app/build.gradle.kts exists
-4. app/src/main/AndroidManifest.xml exists
-5. Kotlin source files exist
-6. applicationId is:
-   com.example.livesignalassistant.finalbrain90
-7. build-apk.yml contains ONLY YAML
-8. No part of THIS PROMPT exists inside ANY project file
-9. assembleDebug can build the project
-10. The project remains a COMPLETE SOURCE PROJECT, not an APK-only package
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/90S-Final-Brain-71.7.27.apk"
 
-FINAL OUTPUT:
-
-Return exactly ONE complete source ZIP named:
-
-LiveSignalAssistant_71.7.27_90S_FINAL_BRAIN_BUILD_READY.zip
-
-Do NOT return multiple versions.
-Do NOT return an APK-only ZIP.
-Do NOT return a patch.
-Do NOT change the analysis logic.
-Do NOT include this prompt inside the project.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 90S-Final-Brain-71.7.27
+          path: apk-output/90S-Final-Brain-71.7.27.apk
+          if-no-files-found: error
