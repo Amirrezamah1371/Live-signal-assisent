@@ -1,118 +1,819 @@
-name: Build 90S Experience Brain Fixed
+Use the uploaded source ZIP:
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
 
-permissions:
-  contents: read
+LiveSignalAssistant_71.7.27_90S_EXPERIENCE_V2_FIXED.zip
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+This ZIP is the authoritative source for the next build.
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
 
-      - name: Extract FIXED source
-        shell: bash
-        run: |
-          set -euo pipefail
+DO NOT restore code from another version.
+DO NOT replace the SignalAnalyzer with code from later experimental versions.
+DO NOT redesign the trading logic.
+DO NOT undo the modifications already present in this source.
 
-          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*90S_EXPERIENCE_BRAIN_FIXED.zip' -print -quit)"
 
-          if [ -z "$ZIP" ]; then
-            echo "::error::FIXED Experience Brain ZIP not found in repository root"
-            exit 1
-          fi
+Your task is to inspect this exact source, preserve its current architecture, fix only genuine compile/runtime/integration problems if found, and produce a working Android APK.
 
-          echo "Using source: $ZIP"
 
-          DEST="$RUNNER_TEMP/experience-brain-fixed"
-          rm -rf "$DEST"
-          mkdir -p "$DEST"
+CRITICAL BEHAVIOR THAT MUST REMAIN:
 
-          unzip -q "$ZIP" -d "$DEST"
 
-          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
 
-          if [ -z "$SETTINGS" ]; then
-            echo "::error::Android project settings file not found"
-            exit 1
-          fi
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
+BASE BRAIN
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Project directory: $PROJECT_DIR"
 
-      - name: Verify Experience Brain
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
 
-          test -f "app/src/main/java/com/example/livesignalassistant/CaptureService.kt"
-          test -f "app/src/main/java/com/example/livesignalassistant/SignalAnalyzer.kt"
-          test -f "app/src/main/java/com/example/livesignalassistant/MemoryStore.kt"
-          test -f "app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt"
-          test -f "app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt"
 
-          grep -q 'com.example.livesignalassistant.finalbrain90' app/build.gradle.kts
-          grep -q 'permanent_experience/experience_v1.json' app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt
-          grep -q 'experience.learn' app/src/main/java/com/example/livesignalassistant/CaptureService.kt
-          grep -q 'experience_snapshot/experience_v1.json' app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt
+The underlying decision brain is based on the previously successful:
 
-          echo "Experience Brain verified successfully."
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
+71.7.27_1M_ADAPTIVE_RECENCY
 
-      - name: Build APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
 
-          if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew --no-daemon clean assembleDebug --stacktrace
-          else
-            gradle --no-daemon clean assembleDebug --stacktrace
-          fi
+Its original market-reading behavior must remain the foundation.
 
-      - name: Collect APK
-        shell: bash
-        run: |
-          set -euo pipefail
 
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+Do not replace it with the later degraded 90-second or Experience implementations.
 
-          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
 
-          if [ -z "$APK" ]; then
-            echo "::error::APK not found after successful build"
-            exit 1
-          fi
 
-          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED.apk"
 
-          echo "APK ready."
+90-SECOND DECISION CYCLE
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED
-          path: apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED.apk
-          if-no-files-found: error
+
+
+
+The intended cycle is:
+
+
+80 seconds = observation and analysis
+10 seconds = final validation
+Total = approximately 90 seconds
+
+
+During the first 80 seconds:
+
+
+Continuously collect market observations.
+
+
+Do NOT issue a new trade signal.
+
+
+Track accumulated directional evidence, momentum, structure, velocity, acceleration, exhaustion, impulse maturity, counter-movement and shock/regime information.
+
+
+During the final 10 seconds:
+
+
+Do NOT throw away the previous 80 seconds.
+
+
+Use the final window primarily to validate the proposed entry.
+
+
+The final window may:
+
+
+CONFIRM
+WEAKEN
+VETO
+
+
+the candidate.
+
+
+It must NOT reverse UP to DOWN or DOWN to UP because of a normal short pullback.
+
+
+Direction reversal is permitted only when multiple independent pieces of evidence confirm a genuine regime change, such as:
+
+
+strong counter impulse
+persistent opposite movement
+meaningful velocity reversal
+acceleration reversal
+structure failure/break
+failure of the previous continuation
+significant volatility/shock evidence
+
+
+One opposite candle is NOT sufficient.
+
+
+A short retracement is NOT sufficient.
+
+
+
+
+ONE DECISION PER CYCLE
+
+
+
+
+At the end of each complete cycle produce only:
+
+
+UP
+DOWN
+WAIT
+
+
+Do not produce multiple competing trade signals during one cycle.
+
+
+WAIT is valid.
+
+
+Do not force a trade.
+
+
+
+
+DIRECTION AND ENTRY QUALITY MUST REMAIN SEPARATE
+
+
+
+
+A correct trend direction does NOT automatically mean the current moment is a good entry.
+
+
+Example:
+
+
+Direction = UP
+Trend = strong
+Impulse = mature
+Entry timing = late
+
+
+Correct behavior:
+
+
+WAIT
+
+
+NOT DOWN.
+
+
+The assistant must independently evaluate:
+
+
+direction quality
+entry quality
+impulse maturity
+late-entry risk
+exhaustion
+remaining movement potential
+
+
+
+
+LATE ENTRY PROTECTION
+
+
+
+
+Preserve the late-entry/exhaustion protections already present in the source.
+
+
+Avoid entries after the majority of the short-term move has already happened.
+
+
+Detect situations including:
+
+
+late continuation
+extended impulse
+momentum deceleration
+exhaustion
+large displacement before entry
+poor remaining room
+snapback/retracement risk
+
+
+Do not solve late entry by reversing direction.
+
+
+Use WAIT when appropriate.
+
+
+
+
+SHOCK / SUDDEN MARKET MOVEMENT
+
+
+
+
+Preserve and verify the shock/regime-change logic.
+
+
+The purpose is to fix the previously observed problem where the assistant could understand the general trend but fail to react correctly when the market suddenly changed behavior.
+
+
+Shock/regime logic must inspect:
+
+
+velocity
+acceleration
+counter impulse
+directional displacement
+persistence break
+volatility expansion
+structure break
+
+
+It is a protective layer.
+
+
+It must not become a second independent trading brain.
+
+
+Normal market noise must not trigger regime reversal.
+
+
+
+
+EXPERIENCE V2
+
+
+
+
+Preserve the Experience V2 implementation included in this source.
+
+
+The previous Experience implementation failed because experience retrieval was too close to exact matching and frequently produced:
+
+
+experience_applied = false
+experience_samples = 0
+experience_delta = 0
+
+
+even when completed historical trades existed.
+
+
+Experience V2 must retrieve SIMILAR setups rather than requiring exact setup equality.
+
+
+Historical similarity may consider:
+
+
+direction
+expiry
+trend strength
+momentum
+velocity
+acceleration
+volatility
+structure
+impulse maturity
+entry quality
+exhaustion
+counter impulse
+shock/regime state
+final-window behavior
+
+
+
+
+EXPERIENCE MUST NEVER BECOME THE MAIN BRAIN
+
+
+
+
+This rule is mandatory.
+
+
+Experience modifies setup quality.
+
+
+Experience does NOT determine market direction.
+
+
+Experience MUST NOT directly convert:
+
+
+UP -> DOWN
+
+
+or:
+
+
+DOWN -> UP
+
+
+If current analysis proposes UP but similar historical UP entries performed badly:
+
+
+Experience may weaken the setup or convert the final result to WAIT.
+
+
+It must NOT produce DOWN merely because historical UP setups lost.
+
+
+Same rule in reverse.
+
+
+
+
+SMALL-SAMPLE SAFETY
+
+
+
+
+Experience must begin recognizing similar historical samples without requiring a large exact-match sample.
+
+
+However:
+
+
+2 or 3 historical trades must NOT overpower current market analysis.
+
+
+Experience influence must increase gradually based on:
+
+
+sample count
+similarity quality
+historical consistency
+WIN/LOSS distribution
+recency
+
+
+Small sample = small influence.
+
+
+Repeated consistent evidence = stronger influence.
+
+
+Never allow one WIN or one LOSS to rewrite the strategy.
+
+
+
+
+EXPERIENCE MUST LEARN CONDITIONS, NOT DIRECTIONAL PREJUDICE
+
+
+
+
+A LOSS must not teach:
+
+
+"UP is bad"
+
+
+or:
+
+
+"DOWN is bad."
+
+
+It must teach the conditions surrounding the bad entry.
+
+
+For example:
+
+
+late UP continuation
+exhausted impulse
+post-shock entry
+weak reversal
+counter-trend entry
+high directional strength but poor timing
+
+
+Prevent permanent UP-only or DOWN-only bias.
+
+
+
+
+PERMANENT EXPERIENCE MEMORY
+
+
+
+
+The compact learned Experience database must survive:
+
+
+application restart
+phone restart
+session Export
+raw-memory cleanup
+screenshot cleanup
+normal application usage
+
+
+Clearing bulky session memory must NOT erase learned Experience.
+
+
+Separate:
+
+
+RAW SESSION MEMORY
+
+
+from:
+
+
+PERMANENT LEARNED EXPERIENCE.
+
+
+Raw memory may contain:
+
+
+screenshots
+observations
+debug information
+session records
+
+
+and may be exported/cleared.
+
+
+Permanent Experience contains compact learned setup information and must remain.
+
+
+
+
+STORAGE CONTROL
+
+
+
+
+Do not permanently store every screenshot as Experience.
+
+
+Permanent Experience must remain compact.
+
+
+Use setup fingerprints / aggregated statistics.
+
+
+The application must be capable of learning for months without uncontrolled storage growth.
+
+
+
+
+RESULT LEARNING
+
+
+
+
+Only actual executed trades with valid user-recorded outcomes affect Experience.
+
+
+WIN = positive learning evidence.
+
+
+LOSS = negative learning evidence.
+
+
+VOID = neutral / excluded.
+
+
+Generated signals that expire without execution must NOT count as WIN or LOSS.
+
+
+
+
+SCORE IS NOT PROBABILITY
+
+
+
+
+Do not interpret model_score=96 as a literal 96% probability of winning.
+
+
+Recent testing demonstrated losing trades with model_score=96.
+
+
+Preserve the distinction between:
+
+
+internal model score
+
+
+and:
+
+
+calibrated probability/confidence.
+
+
+A high direction score must never bypass poor entry timing or exhaustion protection.
+
+
+
+
+DIAGNOSTICS
+
+
+
+
+For every completed cycle, preserve or implement useful diagnostic logging including:
+
+
+base_direction
+base_direction_score
+entry_quality
+cycle_up_weight
+cycle_down_weight
+final_window_direction
+final_window_strength
+regime_change_detected
+shock_strength
+late_entry_detected
+exhaustion_detected
+experience_samples
+experience_similarity
+experience_win_rate
+experience_delta
+experience_applied
+final_decision
+expiry
+decision_reason
+
+
+If the final direction changes, record:
+
+
+direction_changed=true
+
+
+and a clear:
+
+
+direction_change_reason
+
+
+This is necessary for future exported-memory analysis.
+
+
+
+
+SIGNAL LOCK
+
+
+
+
+Do not break Signal Lock.
+
+
+Expiry timing begins from the user's signal activation/lock action according to the existing application behavior.
+
+
+Preserve the locked floating bubble.
+
+
+Preserve:
+
+
+WIN
+LOSS
+VOID
+
+
+result controls.
+
+
+
+
+EXPIRIES
+
+
+
+
+Preserve supported expiries already used by this project.
+
+
+Do not restore the removed 30-second expiry.
+
+
+Do not randomly change expiry.
+
+
+
+
+DO NOT ADD ARTIFICIAL RESTRICTIONS
+
+
+
+
+Do NOT introduce:
+
+
+signal quotas
+hourly limits
+daily limits
+arbitrary cooldowns
+artificial waiting periods
+
+
+The decision must depend on market quality.
+
+
+
+
+DO NOT "FIX" ACCURACY BY MAKING THE ROBOT SILENT
+
+
+
+
+Do not simply raise every threshold until almost everything becomes WAIT.
+
+
+WAIT should occur for genuinely weak or poorly timed setups.
+
+
+Strong, well-timed setups must still be allowed to produce signals.
+
+
+
+
+REGRESSION SAFETY
+
+
+
+
+This is extremely important.
+
+
+When:
+
+
+experience_samples = 0
+
+
+Experience must have ZERO effect on the base decision.
+
+
+The application must behave like the underlying 71.7.27 ADAPTIVE_RECENCY brain plus the explicitly added 90-second observation/final-validation and shock protection.
+
+
+Experience must be an enhancement, not a dependency.
+
+
+
+
+SOURCE INTEGRITY
+
+
+
+
+Inspect the actual uploaded source before changing anything.
+
+
+Do not generate a fake replacement project.
+
+
+Do not simplify or rewrite functioning components unnecessarily.
+
+
+Preserve:
+
+
+screen capture
+overlay
+floating bubbles
+Signal Lock
+WIN/LOSS/VOID
+memory export
+existing analyzer
+existing Android permissions
+existing working UI
+
+
+Only fix code where required.
+
+
+
+
+BUILD
+
+
+
+
+After inspection:
+
+
+Resolve compile errors if any.
+
+
+Verify imports and Kotlin syntax.
+
+
+Verify persistence/database compatibility.
+
+
+Verify Experience storage initialization.
+
+
+Verify the 90-second state machine.
+
+
+Verify that the final 10-second window cannot casually reverse the accumulated 80-second direction.
+
+
+Verify that Experience retrieval can actually find similar historical setups.
+
+
+Verify that Experience cannot directly reverse direction.
+
+
+Verify that raw-memory clearing does not delete permanent Experience.
+
+
+Then build the Android APK.
+
+
+If Gradle wrapper or build configuration is incomplete, repair the project configuration without replacing application logic.
+
+
+Run available tests/build checks.
+
+
+Do not stop after editing source.
+
+
+The final goal is a successfully compiled APK.
+
+
+
+
+FINAL REPORT
+
+
+
+
+After completion, report clearly:
+
+
+BUILD STATUS
+
+
+APK NAME
+
+
+APK LOCATION
+
+
+FILES MODIFIED
+
+
+90-SECOND CYCLE STATUS
+
+
+SHOCK/REGIME STATUS
+
+
+EXPERIENCE V2 STATUS
+
+
+PERMANENT EXPERIENCE STORAGE STATUS
+
+
+RAW MEMORY CLEARING STATUS
+
+
+DIRECTION-REVERSAL PROTECTION STATUS
+
+
+ENTRY-TIMING / EXHAUSTION STATUS
+
+
+SIGNAL LOCK STATUS
+
+
+Any remaining warnings or limitations.
+
+
+Most importantly:
+
+
+DO NOT IMPROVISE A NEW TRADING STRATEGY.
+
+
+The architecture must remain:
+
+
+71.7.27 ADAPTIVE_RECENCY BASE
++
+80s FULL OBSERVATION
++
+10s FINAL VALIDATION
++
+ENTRY TIMING / EXHAUSTION PROTECTION
++
+SHOCK / REGIME PROTECTION
++
+BOUNDED SIMILARITY-BASED PERMANENT EXPERIENCE
+
+
+ONE FINAL UP / DOWN / WAIT DECISION
+
+
+Build this exact source into the working APK.
+
+
