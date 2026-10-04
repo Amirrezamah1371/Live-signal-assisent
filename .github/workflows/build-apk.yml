@@ -1,91 +1,118 @@
-Use ONLY the attached file:
+name: Build 90S Experience Brain Fixed
 
-LiveSignalAssistant_71.7.27_90S_EXPERIENCE_BRAIN_FIXED.zip
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-This is the corrected COMPLETE Android source project.
+permissions:
+  contents: read
 
-IMPORTANT:
-The GitHub Actions workflow is already correct and working.
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-DO NOT edit, replace, rewrite, delete, or modify:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-.github/workflows/build-apk.yml
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-DO NOT write this prompt into ANY repository file.
+      - name: Extract FIXED source
+        shell: bash
+        run: |
+          set -euo pipefail
 
-DO NOT modify the Android source code.
+          ZIP="$(find "$GITHUB_WORKSPACE" -maxdepth 1 -type f -name '*90S_EXPERIENCE_BRAIN_FIXED.zip' -print -quit)"
 
-DO NOT redesign or change any application logic.
+          if [ -z "$ZIP" ]; then
+            echo "::error::FIXED Experience Brain ZIP not found in repository root"
+            exit 1
+          fi
 
-DO NOT modify:
-- ExperienceStore.kt
-- CaptureService.kt
-- SignalAnalyzer.kt
-- MemoryStore.kt
-- MemoryExporter.kt
-- MainActivity.kt
-- AndroidManifest.xml
-- build.gradle.kts
-- settings.gradle.kts
+          echo "Using source: $ZIP"
 
-DO NOT change the applicationId.
+          DEST="$RUNNER_TEMP/experience-brain-fixed"
+          rm -rf "$DEST"
+          mkdir -p "$DEST"
 
-The applicationId MUST remain:
+          unzip -q "$ZIP" -d "$DEST"
 
-com.example.livesignalassistant.finalbrain90
+          SETTINGS="$(find "$DEST" -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) -print -quit)"
 
-The previous source ZIP had a Kotlin compilation error in ExperienceStore.kt.
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::Android project settings file not found"
+            exit 1
+          fi
 
-THIS FIXED ZIP ALREADY CONTAINS THE CORRECTION.
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
-Do NOT attempt to recreate or re-fix that code.
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project directory: $PROJECT_DIR"
 
-YOUR ONLY TASK:
+      - name: Verify Experience Brain
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
 
-1. Put this ZIP file in the ROOT of the repository.
+          test -f "app/src/main/java/com/example/livesignalassistant/CaptureService.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/SignalAnalyzer.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/MemoryStore.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt"
+          test -f "app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt"
 
-2. Remove the previous 90S EXPERIENCE BRAIN source ZIP from the repository root if it is still present, so there is only ONE current Experience Brain source ZIP.
+          grep -q 'com.example.livesignalassistant.finalbrain90' app/build.gradle.kts
+          grep -q 'permanent_experience/experience_v1.json' app/src/main/java/com/example/livesignalassistant/ExperienceStore.kt
+          grep -q 'experience.learn' app/src/main/java/com/example/livesignalassistant/CaptureService.kt
+          grep -q 'experience_snapshot/experience_v1.json' app/src/main/java/com/example/livesignalassistant/MemoryExporter.kt
 
-3. Keep this exact file:
+          echo "Experience Brain verified successfully."
 
-LiveSignalAssistant_71.7.27_90S_EXPERIENCE_BRAIN_FIXED.zip
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
-4. DO NOT extract its contents into the repository.
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
 
-5. DO NOT touch .github/workflows/build-apk.yml.
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon clean assembleDebug --stacktrace
+          else
+            gradle --no-daemon clean assembleDebug --stacktrace
+          fi
 
-6. Commit the ZIP to the main branch.
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
 
-7. Stop.
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
 
-The existing GitHub Actions workflow will extract and build the Android project automatically.
+          APK="$(find "$PROJECT_DIR" -type f -name '*.apk' -path '*/build/outputs/apk/*' -print -quit)"
 
-CRITICAL:
+          if [ -z "$APK" ]; then
+            echo "::error::APK not found after successful build"
+            exit 1
+          fi
 
-Do not paste these instructions into build-apk.yml.
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED.apk"
 
-Do not create a new workflow.
+          echo "APK ready."
 
-Do not modify the existing workflow.
-
-Do not modify the source ZIP.
-
-Do not rename the ZIP.
-
-Do not create source files manually.
-
-Do not change the Experience Brain.
-
-The Permanent Experience system inside the ZIP must remain exactly as provided.
-
-FINAL RESULT REQUIRED:
-
-The repository root contains:
-
-LiveSignalAssistant_71.7.27_90S_EXPERIENCE_BRAIN_FIXED.zip
-
-and the existing:
-
-.github/workflows/build-apk.yml
-
-remains completely unchanged.
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED
+          path: apk-output/LiveSignalAssistant-71.7.27-90S-EXPERIENCE-BRAIN-FIXED.apk
+          if-no-files-found: error
