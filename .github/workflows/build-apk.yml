@@ -1,191 +1,531 @@
-name: Build 90S Vision 2M3M APK
+Use ONLY the attached source ZIP:
 
-on:
-  workflow_dispatch:
+LiveSignalAssistant_71.7.27_90S_VISION_2M3M_EXPERIENCE_V2.zip
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+This is an Android/Kotlin SOURCE PROJECT.
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+Your task is to deeply audit the existing project, fix verified engineering/compile/runtime problems, and produce a working debug APK.
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
+IMPORTANT:
+- Do NOT redesign or simplify the architecture.
+- Do NOT remove features just to make the project compile.
+- Do NOT replace real implementations with placeholders.
+- Do NOT paste this prompt or any natural-language instructions into build-apk.yml or any source/configuration file.
+- .github/workflows/build-apk.yml must contain VALID YAML ONLY.
+- Read actual compiler errors before changing code.
+- Continue fixing verified errors until assembleDebug succeeds.
 
-      - name: Find and extract source ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
+==================================================
+ARCHITECTURE THAT MUST REMAIN
+==================================================
 
-          ZIP=$(find "$GITHUB_WORKSPACE" -type f \
-            -name "LiveSignalAssistant_71.7.27_90S_VISION_2M3M_EXPERIENCE.zip" \
-            | head -n 1)
+ONE 90-second cycle:
 
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found."
-            echo "Expected:"
-            echo "LiveSignalAssistant_71.7.27_90S_VISION_2M3M_EXPERIENCE.zip"
-            echo ""
-            echo "ZIP files currently in repository:"
-            find "$GITHUB_WORKSPACE" -type f -name "*.zip" -print || true
-            exit 1
-          fi
+0–80 seconds:
+continuous deep observation and analysis.
+NO trade signal may be published.
 
-          echo "SOURCE ZIP:"
-          echo "$ZIP"
+80–90 seconds:
+Final Brain / Final Verification.
 
-          rm -rf "$RUNNER_TEMP/livesignal"
-          mkdir -p "$RUNNER_TEMP/livesignal"
+At the end of the cycle EXACTLY ONE result:
 
-          unzip -q "$ZIP" -d "$RUNNER_TEMP/livesignal"
+UP 2M
+DOWN 2M
+UP 3M
+DOWN 3M
+WAIT
 
-          SETTINGS=$(find "$RUNNER_TEMP/livesignal" -type f \
-            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
-            | head -n 1)
+WAIT must remain available.
+Never force a trade merely to increase signal frequency.
 
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle or settings.gradle.kts not found."
-            echo "Extracted files:"
-            find "$RUNNER_TEMP/livesignal" -maxdepth 4 -type f -print
-            exit 1
-          fi
+==================================================
+2M / 3M
+==================================================
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+2M and 3M are independent prediction horizons.
 
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+2M predicts direction at Entry + 120 seconds.
+3M predicts direction at Entry + 180 seconds.
 
-          echo "ANDROID PROJECT:"
-          echo "$PROJECT_DIR"
+Do NOT implement one shared prediction with two timers.
 
-      - name: Show project information
-        shell: bash
-        run: |
-          set -euo pipefail
+The Final Brain must choose:
+- direction
+- horizon
+- or WAIT
 
-          echo "PROJECT_DIR=$PROJECT_DIR"
+based on the strongest reliable evidence.
 
-          echo "Gradle files:"
-          find "$PROJECT_DIR" -maxdepth 4 -type f \
-            \( -name "*.gradle" -o -name "*.gradle.kts" \) \
-            -print
+After manual LOCK/START:
 
-          echo "Manifest files:"
-          find "$PROJECT_DIR" -type f \
-            -name "AndroidManifest.xml" \
-            -print
+2M expiry = exactly 120 seconds from LOCK.
+3M expiry = exactly 180 seconds from LOCK.
 
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          set +e
+Use monotonic timing.
 
-          echo "ANDROID_HOME=${ANDROID_HOME:-}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+Expiry MUST NOT start from signal publication.
 
-          SDKMANAGER=""
+==================================================
+V2 DUAL VISION — CRITICAL
+==================================================
 
-          if [ -n "${ANDROID_HOME:-}" ] && \
-             [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          fi
+This V2 was created after forensic analysis showed the previous vision system behaved differently on AREA/LINE charts versus CANDLESTICK charts.
 
-          if [ -z "$SDKMANAGER" ] && \
-             [ -n "${ANDROID_SDK_ROOT:-}" ] && \
-             [ -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-            SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          fi
+PRESERVE and audit the V2 dual-vision architecture.
 
-          if [ -z "$SDKMANAGER" ] && [ -n "${ANDROID_HOME:-}" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME" \
-              -type f \
-              -name sdkmanager \
-              2>/dev/null \
-              | head -n 1)
-          fi
+The system must support:
 
-          if [ -n "$SDKMANAGER" ]; then
-            echo "Using sdkmanager:"
-            echo "$SDKMANAGER"
+1. CANDLE vision
+2. AREA/LINE vision
 
-            yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          else
-            echo "sdkmanager not found."
-            echo "Continuing to Gradle build."
-          fi
+It must detect which visual structure is present and use the appropriate extraction method.
 
-          exit 0
+CANDLE mode must NOT depend on an area-chart upper-edge algorithm.
 
-      - name: Set up Gradle 8.10.2
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.10.2"
+AREA mode must NOT treat the entire colored fill as the price trajectory.
 
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set -euo pipefail
+Vision must reject/downweight contamination from:
 
-          cd "$PROJECT_DIR"
+- horizontal current-price lines
+- buttons/toolbars
+- text
+- trade overlays
+- disconnected graphical elements
+- filled chart regions
+- stale frames
+- rescaling artifacts
 
-          echo "BUILD DIRECTORY:"
-          pwd
+Do NOT "fix" vision by simply lowering quality thresholds.
 
-          if [ -f "./gradlew" ]; then
-            echo "Using project Gradle wrapper."
-            chmod +x ./gradlew
+Audit the actual extraction pipeline.
 
-            ./gradlew \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace
-          else
-            echo "Gradle wrapper not found."
-            echo "Using Gradle 8.10.2 from runner."
+Verify that:
 
-            gradle \
-              --no-daemon \
-              clean \
-              assembleDebug \
-              --stacktrace
-          fi
+vision_kind
 
-      - name: Find and verify APK
-        shell: bash
-        run: |
-          set -euo pipefail
+correctly reports CANDLE or AREA when possible.
 
-          APK=$(find "$PROJECT_DIR" \
-            -type f \
-            -path "*/build/outputs/apk/debug/*.apk" \
-            | head -n 1)
+Also verify that diagnostic values such as:
 
-          if [ -z "$APK" ]; then
-            echo "ERROR: Build completed but APK was not found."
-            echo "Available APK files:"
-            find "$PROJECT_DIR" -type f -name "*.apk" -print || true
-            exit 1
-          fi
+vision quality
+coverage
+continuity
+anchors
+horizontal rejects
 
-          echo "APK FOUND:"
-          echo "$APK"
+are actually populated and useful.
 
-          ls -lh "$APK"
+==================================================
+EVIDENCE ENGINE — CRITICAL
+==================================================
 
-          mkdir -p "$RUNNER_TEMP/final-apk"
+A previous real test produced cases such as:
 
-          cp "$APK" \
-            "$RUNNER_TEMP/final-apk/LiveSignalAssistant-90S-Vision-2M3M-debug.apk"
+89 observations
+89 vision-good observations
+but only 3 usable observations
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: LiveSignalAssistant-90S-Vision-2M3M
-          path: ${{ runner.temp }}/final-apk/LiveSignalAssistant-90S-Vision-2M3M-debug.apk
-          if-no-files-found: error
-          retention-days: 7
+and therefore TOO_LITTLE_EVIDENCE.
+
+This is a known architecture problem.
+
+V2 is intended to fix it.
+
+DO NOT revert to the old behavior where only instantaneous UP/DOWN observations count as evidence.
+
+A visually valid WAIT observation can still contain useful trajectory and horizon evidence.
+
+The Final Brain should evaluate the continuous timestamped trajectory and accumulated 2M/3M evidence.
+
+However:
+
+DO NOT simply make signals easier.
+
+Bad/ambiguous evidence must still produce WAIT.
+
+The goal is:
+
+GOOD DATA should reach the Final Brain.
+
+BAD DATA should be rejected.
+
+==================================================
+REAL TIMESTAMPS
+==================================================
+
+Every accepted observation must preserve its actual monotonic timestamp.
+
+Never assume observations are exactly one second apart.
+
+All trajectory calculations must use actual elapsed time.
+
+Audit the complete path:
+
+screen capture
+-> vision
+-> observation
+-> timestamped trajectory
+-> features
+-> 2M brain
+-> 3M brain
+-> Final Brain
+
+==================================================
+FEATURES
+==================================================
+
+Audit multi-scale features covering approximately:
+
+3s
+6s
+10s
+20s
+40s
+80s
+
+including where implemented:
+
+velocity
+slope
+acceleration
+deceleration
+jerk
+persistence
+persistence decay
+counter movement
+counter impulse
+stall
+exhaustion
+micro reversal
+sustained reversal
+change point
+regime instability
+vision quality
+data freshness
+
+IMPORTANT:
+
+Verify these features actually receive non-zero/live values when appropriate.
+
+Previous versions had regressions where important features silently remained zero.
+
+Trace feature generation rather than assuming it works.
+
+==================================================
+FINAL 10 SECONDS
+==================================================
+
+The Final Brain must use the final 10 seconds to determine whether the interpretation from the first 80 seconds is still valid.
+
+Recent persistent change can:
+- confirm
+- weaken
+- veto
+- change horizon
+- change direction
+- produce WAIT
+
+But a single noisy frame/spike must NOT flip the final decision.
+
+==================================================
+DIRECTION != ENTRY QUALITY
+==================================================
+
+Preserve the separation between:
+
+DIRECTION
+
+and
+
+ENTRY QUALITY.
+
+A directional bias does not automatically mean the current moment is a good entry.
+
+Examples requiring caution/WAIT:
+
+late impulse
+exhaustion
+unstable reversal
+poor vision
+strong disagreement
+weak trajectory
+regime transition
+insufficient evidence
+
+==================================================
+CONFIDENCE
+==================================================
+
+Do NOT recreate fake confidence saturation.
+
+model_score or strength must NOT be described as calibrated win probability unless it has actually been empirically calibrated.
+
+Do NOT make most signals equal 96.
+
+Confidence/strength must respond to:
+
+evidence agreement
+vision quality
+trajectory quality
+freshness
+regime stability
+2M/3M agreement/disagreement
+historical Experience evidence
+
+==================================================
+PERMANENT EXPERIENCE — MANDATORY
+==================================================
+
+Permanent Experience memory MUST remain.
+
+2M and 3M learning contexts must remain separate.
+
+WIN:
+train the corresponding horizon.
+
+LOSS:
+train the corresponding horizon.
+
+VOID:
+must NOT train.
+
+Experience should influence decisions only when sufficient historical evidence exists.
+
+Do not allow tiny samples to dominate live evidence.
+
+Use smoothing/prior logic where appropriate.
+
+IMPORTANT:
+
+There must be NO normal in-app Experience deletion control.
+
+Clear Session must NEVER delete permanent Experience.
+
+Permanent Experience should survive:
+- normal app restart
+- normal APK update when Android preserves app-private data
+
+Do not falsely claim it survives uninstall or Android Clear App Data.
+
+Do NOT change applicationId unless absolutely necessary.
+
+Do NOT create a new package/applicationId merely to make installation easier.
+
+==================================================
+EXPORT / FORENSICS
+==================================================
+
+Preserve detailed session export.
+
+The exported memory should make it possible to reconstruct WHY every cycle resulted in:
+
+UP
+DOWN
+or WAIT.
+
+Where available export:
+
+cycle id
+real timestamps
+vision_kind
+vision quality
+coverage
+continuity
+anchors
+horizontal rejects
+trajectory features
+2M evidence
+3M evidence
+direction scores
+entry-quality scores
+Final Brain adjustment
+WAIT reason
+chosen horizon
+chosen direction
+manual LOCK timestamp
+expiry timestamp
+WIN/LOSS/VOID
+Experience advice
+
+Do not remove diagnostic data to reduce file size unless it is genuinely redundant.
+
+==================================================
+DO NOT ADD
+==================================================
+
+Do NOT add:
+
+automatic trading
+martingale
+forced signals
+minimum signal quota
+fake win-rate claims
+random direction fallback
+automatic UP/DOWN when evidence is weak
+
+==================================================
+BUILD AUDIT
+==================================================
+
+Inspect:
+
+Kotlin source
+Gradle files
+AndroidManifest.xml
+foreground service
+MediaProjection
+overlay permission
+screen capture
+coroutines
+thread safety
+lifecycle
+timers
+storage
+Experience persistence
+export
+GitHub Actions workflow
+
+Search the project for suspicious legacy logic including:
+
+1M_ONLY
+60000
+hard-coded 60-second expiry
+TODO
+FIXME
+placeholder
+old single-vision extractor
+broad blue-pixel collection
+old usable-vote gate
+assumed 1-second cadence
+Experience deletion
+fake confidence clipping
+dead features
+
+Do NOT automatically delete every occurrence.
+
+Determine whether each occurrence is actually wrong in context.
+
+==================================================
+GITHUB WORKFLOW
+==================================================
+
+If build-apk.yml exists:
+
+It MUST contain YAML ONLY.
+
+Never put this prompt into build-apk.yml.
+
+Use a normal Android build workflow.
+
+Prefer:
+
+actions/checkout@v4
+actions/setup-java@v5
+gradle/actions/setup-gradle@v4
+actions/upload-artifact@v4
+
+JDK 17.
+
+Avoid android-actions/setup-android@v3 if it triggers interactive Android SDK license acceptance problems.
+
+==================================================
+BUILD PROCESS
+==================================================
+
+1. Extract the attached ZIP.
+
+2. Inspect the project BEFORE modifying it.
+
+3. Trace the V2 vision/evidence pipeline.
+
+4. Identify verified defects.
+
+5. Fix root causes.
+
+6. Run assembleDebug.
+
+7. If it fails, read the exact error.
+
+8. Fix that exact root cause.
+
+9. Run assembleDebug again.
+
+10. Repeat until build succeeds.
+
+11. Confirm an actual APK file exists.
+
+Do not stop at "configuration successful".
+
+==================================================
+FINAL CHECKLIST
+==================================================
+
+Before finishing verify:
+
+[ ] Android project builds successfully
+[ ] APK actually exists
+[ ] 90-second cycle preserved
+[ ] 80-second observation phase preserved
+[ ] 10-second Final Brain preserved
+[ ] no premature signal publication
+[ ] one final decision per cycle
+[ ] WAIT preserved
+[ ] 2M independent prediction works
+[ ] 3M independent prediction works
+[ ] 2M expiry = 120s from LOCK
+[ ] 3M expiry = 180s from LOCK
+[ ] monotonic timestamps used
+[ ] CANDLE vision exists and works
+[ ] AREA/LINE vision exists and works
+[ ] chart-type selection works
+[ ] vision diagnostics are populated
+[ ] valid WAIT observations can contribute evidence
+[ ] old 89-good-to-3-usable bottleneck is not recreated
+[ ] bad vision still causes WAIT
+[ ] multi-scale features are populated
+[ ] Final Brain handles persistent change
+[ ] single-frame noise cannot easily flip direction
+[ ] direction and entry quality remain separate
+[ ] confidence is not falsely presented as win probability
+[ ] Experience is permanent inside normal app lifecycle
+[ ] 2M/3M Experience contexts are separate
+[ ] WIN/LOSS train
+[ ] VOID does not train
+[ ] Clear Session does not delete Experience
+[ ] no Experience-delete UI exists
+[ ] applicationId preserved
+[ ] export works
+[ ] no automatic trading
+[ ] no martingale
+[ ] no forced signal quota
+
+==================================================
+FINAL REPORT
+==================================================
+
+When finished report:
+
+1. BUILD SUCCESS or BUILD FAILURE.
+2. Exact APK path/name.
+3. Every file modified.
+4. Every verified bug found.
+5. Root cause of each bug.
+6. Exact fix made.
+7. Any unresolved issue.
+8. Whether applicationId remained unchanged.
+9. Whether 2M/3M Experience remain separate.
+10. Whether Clear Session leaves Experience untouched.
+11. Whether 120/180-second expiry begins from manual LOCK.
+12. Results of the V2 vision/evidence audit.
+13. Anything you could NOT verify.
+
+Never claim the win rate improved without real out-of-sample results.
+
+Success means:
+the bot sees the chart reliably,
+uses valid evidence,
+rejects bad evidence,
+chooses 2M/3M intelligently,
+uses WAIT when justified,
+and learns from actual outcomes.
