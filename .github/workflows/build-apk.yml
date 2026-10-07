@@ -1,12 +1,41 @@
-Use ONLY the file LiveSignalAssistant_72_0_0_TRACEFIX_EXPERIENCE_V3.zip in the repository root.
+name: Build Live Signal Assistant
 
-Task: unpack this ZIP into the repository root so the project files (app/, build.gradle.kts, settings.gradle.kts, gradle.properties, .github/, validation/) sit at the top level, then commit.
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
 
-Rules:
-- Do NOT modify, rewrite, redesign or optimize any Kotlin, Gradle, XML or resource file.
-- Do NOT change the applicationId (com.example.livesignalassistant.recency71727expv2r3), versionCode 47 or versionName 72.0.0-TRACEFIX-EXPERIENCE-V3.
-- Do NOT change or delete app/debug.keystore (it is a fixed, non-secret debug key kept on purpose).
-- Use the .github/workflows/build-apk.yml from inside the ZIP exactly as it is. It must contain only valid YAML. Never paste this prompt or any natural-language text into any source file or YAML.
-- Build target: assembleDebug with JDK 17 and Gradle 8.10.2.
-- If the build fails, show me the exact error text and stop. Do not change application logic to fix it.
-- Do not create alternative versions and do not return an APK-only ZIP.
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unpack source ZIP
+        run: |
+          mkdir -p build_src
+          unzip -q LiveSignalAssistant_72_0_0_TRACEFIX_EXPERIENCE_V3.zip -d build_src
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build APK
+        working-directory: build_src
+        run: gradle --no-daemon clean assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveSignalAssistant-72.0.0
+          path: build_src/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
