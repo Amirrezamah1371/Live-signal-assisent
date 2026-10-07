@@ -1,59 +1,30 @@
-Use ONLY the file LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip that I uploaded to the repository.
+Use ONLY the attached file LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip.
 
-This is the complete Android source project for version 72.0.1 DIAG LOGGING.
-
-Your task is ONLY to build the APK from this ZIP.
-
-STRICT RULES:
-
-1. Extract LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip into a temporary build directory.
-
-2. Do NOT modify, rewrite, fix, redesign, optimize, or regenerate ANY source file.
-
-3. Do NOT modify any Kotlin, Java, Gradle, XML, resource, manifest, configuration, or application logic.
-
-4. Keep exactly:
-   applicationId:
-   com.example.livesignalassistant.recency71727expv2r3
-
-   versionCode:
-   48
-
-   versionName:
-   72.0.1-DIAG-LOGGING
-
-5. Do NOT modify, replace, regenerate, or delete:
-   app/debug.keystore
-
-6. The existing signing configuration must remain unchanged so the APK can update the currently installed 72.0.0 application and preserve Experience V3 data.
-
-7. Use:
-   JDK 17
-   Gradle 8.10.2
-   assembleDebug
-
-8. If you create or edit .github/workflows/build-apk.yml, that file MUST contain ONLY valid GitHub Actions YAML.
+Build the Android APK without modifying any source code or application logic.
 
 IMPORTANT:
-NEVER paste this prompt, explanations, comments from this prompt, or any other natural-language instructions into build-apk.yml or any project/source file.
+The current GitHub Actions workflow is invalid because .github/workflows/build-apk.yml has a YAML syntax error on line 7.
 
-9. Do not use the old 72.0.0 source or any other ZIP/BIN file that may exist in the repository.
+Replace build-apk.yml with a clean, valid GitHub Actions workflow that:
 
-10. Build ONLY:
-    LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip
+1. Checks out the repository.
+2. Extracts LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip into a temporary build directory.
+3. Uses JDK 17.
+4. Uses Gradle 8.10.2.
+5. Runs:
+   gradle --no-daemon clean assembleDebug --stacktrace
+6. Uploads app-debug.apk as an artifact.
 
-11. If the build fails:
-    DO NOT attempt to fix the application source.
-    DO NOT change application logic.
-    Show me the complete exact build error and STOP.
+Do NOT modify anything inside the source ZIP.
 
-12. If the build succeeds:
-    upload app-debug.apk as a GitHub Actions artifact.
+Keep exactly:
+applicationId = com.example.livesignalassistant.recency71727expv2r3
+versionCode = 48
+versionName = 72.0.1-DIAG-LOGGING
 
-Before finishing, confirm:
-- source files were not modified;
-- applicationId remained unchanged;
-- versionCode is 48;
-- versionName is 72.0.1-DIAG-LOGGING;
-- app/debug.keystore remained unchanged;
-- the APK was built from LiveSignalAssistant_72_0_1_DIAG_LOGGING.zip only.
+Do NOT modify or replace app/debug.keystore.
+
+The workflow YAML must contain ONLY valid YAML.
+NEVER paste this prompt or any natural-language instructions into the YAML file.
+
+If the Android build fails after the workflow itself runs successfully, show the exact build error and stop. Do not modify the application source.
