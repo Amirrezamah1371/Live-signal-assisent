@@ -58,9 +58,11 @@ object SignalAnalyzer {
         val continuation=(best.diagnostics["continuation"] as? Double)?:0.0
         val volExpansion=(best.diagnostics["vol_expansion"] as? Double)?:1.0
         val structural=best.reason=="TURN" || best.reason=="REV" || best.reason=="BRK" || best.reason=="FAIL_BRK"
-        if(best.reason=="EXH" || (exhaustion>=.62 && continuation>=.34 && !structural))
+        // A structural label can still be direction evidence, but it does not waive entry safety.
+        // High exhaustion or an unresolved shock becomes a refusal even when the reason is BRK/TURN/REV.
+        if(best.reason=="EXH" || (exhaustion>=.62 && continuation>=.34))
             return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"LATE_ENTRY_RISK",up,down,0,diag,side=sign,traceQuality=tq)
-        if(volExpansion>=2.20 && best.conflict>35 && !structural)
+        if(volExpansion>=2.20 && best.conflict>35)
             return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"SHOCK_UNRESOLVED",up,down,0,diag,side=sign,traceQuality=tq)
 
         // Balanced gates: selective without turning the robot into permanent WAIT.

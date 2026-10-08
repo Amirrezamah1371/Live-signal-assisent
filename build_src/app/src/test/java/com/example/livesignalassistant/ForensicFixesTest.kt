@@ -95,11 +95,15 @@ class ForensicFixesTest {
         assertTrue((held["reg_reason"] as String).startsWith("HELD_"))
         assertEquals(before, ce.pointCount())
         assertEquals(last, ce.debugState()["last"] as Double, 1e-9)
-        val reset = ce.update(9.0, bad)
-        assertEquals("FAIL", reset["reg_status"])
-        assertTrue((reset["reg_reason"] as String).startsWith("RESET_"))
-        assertEquals(true, ce.debugState()["provisional"])
+        val again = ce.update(9.0, bad)
+        assertEquals("FAIL", again["reg_status"])
+        assertFalse((again["reg_reason"] as String).startsWith("RESET_"))
+        assertEquals(before, ce.pointCount())
+        assertEquals(last, ce.debugState()["last"] as Double, 1e-9)
+        assertEquals(false, ce.debugState()["provisional"])
+        // Two seconds after the last trusted point the tail is stale, and the points are still there.
         assertFalse(ce.features(9.0, 1).valid)
+        assertEquals(before, ce.pointCount())
     }
 
     @Test
@@ -175,7 +179,7 @@ class ForensicFixesTest {
         }
         val result = CycleDecider.decide(obs, 90000L, ce, 19.0, none(), 0L)
         assertNotEquals("DOWN", result.direction)
-        assertEquals("LATE_WINDOW", result.reason)
+        assertEquals("ENTRY_REFUSED", result.reason)
     }
 
     @Test

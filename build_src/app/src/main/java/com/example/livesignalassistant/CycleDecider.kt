@@ -38,6 +38,7 @@ object CycleDecider {
 
         var upW = 0.0; var dnW = 0.0; var dirN = 0; var weakN = 0; var lowVis = 0
         var lateW = 0.0; var sideW30 = 0.0
+        var refuseW = 0.0; var directW = 0.0
         for (o in list) {
             val r = o.r
             if (r.reason == "LOW_VISIBILITY" || r.reason == "NO_CURRENT_TIP") { lowVis++; continue }
@@ -46,13 +47,18 @@ object CycleDecider {
             if (!dirObs && !weak) continue
             val w = tw(o) * ef(r) * (if (dirObs) 1.0 else 0.30)
             // Late-entry and unresolved-shock observations are refusals. They must not vote for a direction.
+            // Their full weight is kept so a few structural votes cannot outvote an explicit "do not enter".
             if (weak && r.reason in lateReasons) {
+                val refusal = tw(o) * ef(r)
+                refuseW += refusal
                 if (endMs - o.tMs <= 30000L) lateW += w
                 continue
             }
             val sgn = if (dirObs) (if (r.direction == "UP") 1 else -1) else r.side
             if (sgn > 0) upW += w else dnW += w
-            if (dirObs) dirN++ else weakN++
+            if (dirObs) {
+                dirN++; directW += tw(o) * ef(r)
+            } else weakN++
             if (endMs - o.tMs <= 30000L) sideW30 += w
         }
         val total = upW + dnW
@@ -78,7 +84,7 @@ object CycleDecider {
         common["series_points"] = ss.points; common["series_span_s"] = ss.spanSec
         common["recent_invalid_reason"] = ss.reason; common["recent_valid"] = ss.reason == "OK"
         val rh = ce.regHistory(tNowSec, 20.0)
-        common["reg_ok_20s"] = rh[0]; common["reg_fail_20s"] = rh[1]; common["reg_gap_20s"] = rh[2]; common["reg_new_20s"] = rh[3]
+        common["reg_ok_20s"] = rh[0]; common["reg_fail_20s"] = rh[1]; common["reg_gap_20s"] = rh[2]; common["reg_hold_20s"] = rh[3]
 
         fun wait(reason: String, extra: Map<String, Any?> = emptyMap()) = SignalResult(
             "WAIT", 60, -1, reason = reason, diagnostics = common + extra
@@ -166,6 +172,12 @@ object CycleDecider {
         val adv = experience.advise(sideStr, state, regime, band)
         val strength = (strength0 + (if (adv.action == "AVOID") 0.0 else adv.strengthDelta)).coerceIn(0.0, 100.0)
         val regTrusted = ce.registrationTrusted(tNowSec)
+        // Maturity uses the exhaustion of the side being entered. Refusal frames stay in refuseWeight.
+        val safety = if (fe.valid) EntrySafety.block(
+            fe.agreement, state, exhaustion, fe.impulseZ, fe.velocityRatio,
+            fe.sincePeakSec, fe.counter, refuseW, directW,
+            side * fe.z3, side * fe.z6, side * fe.z10
+        ) else ""
 
         val out = HashMap<String, Any?>(common)
         out["final_recent_side"] = recentSide
@@ -193,9 +205,15 @@ object CycleDecider {
         out["experience_note"] = adv.note; out["experience_alt_posterior"] = adv.altPosterior
         out["experience_veto"] = adv.action == "AVOID"
         out["reg_trusted"] = regTrusted
+        out["entry_safety"] = safety
+        out["refuse_weight"] = refuseW
+        out["direct_weight"] = directW
+        out["safety_exhaustion"] = exhaustion
         out["strength_is_probability"] = false
 
-        val reasonWait = DecisionGate.block(fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action)
+        val reasonWait = DecisionGate.block(
+            fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety
+        )
         if (reasonWait.isNotEmpty())
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), reasonWait, diagnostics = out)
         val reason = if (corrected) "REGIME_CHANGE" else if (recentLed) "RECENT_LED" else topReason
@@ -215,16 +233,61 @@ object DecisionGate {
         lateShare: Double,
         entryQ: Double,
         strength: Double,
-        experienceAction: String
+        experienceAction: String,
+        safety: String = ""
     ): String = when {
         !recentValid -> "NO_RECENT_EVIDENCE"
         !regTrusted -> "REGISTRATION_UNSTABLE"
         state == "EXHAUSTION" -> "EXHAUSTION"
         state == "NOISE" -> "NOISE"
+        safety.isNotEmpty() -> safety
         lateShare >= 0.5 -> "LATE_WINDOW"
         experienceAction == "AVOID" -> "EXPERIENCE_AVOID"
         entryQ < 32.0 -> "POOR_ENTRY"
         strength < 22.0 -> "WEAK_EVIDENCE"
         else -> ""
+    }
+}
+
+/**
+ * Stage B. Direction may already be known. This asks whether now is a safe 1-minute entry.
+ * Structural labels do not reach this object, so they cannot waive it.
+ * Empty string means the entry is allowed to continue to the remaining gates.
+ */
+object EntrySafety {
+    fun block(
+        agreement: Double,
+        state: String,
+        exhaustion: Double,
+        impulseZ: Double,
+        velocityRatio: Double,
+        sincePeakSec: Int,
+        counter: Double,
+        refuseWeight: Double,
+        directWeight: Double,
+        signedZ3: Double = Double.NaN,
+        signedZ6: Double = Double.NaN,
+        signedZ10: Double = Double.NaN
+    ): String {
+        // 0.50 is the existing pullback bar (side * slope), not a fitted trade threshold.
+        // Two of the three recent windows must clear it before the side is called opposed.
+        val slopesKnown = !signedZ3.isNaN() && !signedZ6.isNaN() && !signedZ10.isNaN()
+        if (slopesKnown) {
+            val opposed = listOf(signedZ3, signedZ6, signedZ10).count { it <= -0.50 }
+            if (opposed >= 2) return "AGAINST_RECENT"
+        } else if (agreement < 0.0) {
+            return "AGAINST_RECENT"
+        }
+        // The 6s window still opposes. That is not evidence the pullback has resumed.
+        if (state == "PULLBACK") return "PULLBACK_UNRESOLVED"
+        val atExtreme = sincePeakSec <= 3 && counter < 0.5
+        // 0.62 is the analyzer late-entry bar. 1.5 is the existing impulse bar.
+        // Velocity under 0.80 means the current 3s speed is no longer at the peak of this window.
+        if (atExtreme && exhaustion >= 0.62 && impulseZ >= 1.5 && velocityRatio < 0.80) return "MATURE_IMPULSE"
+        // Explicit do-not-enter mass, not a minimum vote count. A quiet cycle has refuseWeight 0.
+        // Refusals must be more than twice the directional weight before they veto. A near-tie is not
+        // "most of the evidence says do not enter".
+        if (refuseWeight > directWeight * 2.0 && refuseWeight > 0.0) return "ENTRY_REFUSED"
+        return ""
     }
 }
