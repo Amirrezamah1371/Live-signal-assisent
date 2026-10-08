@@ -1,0 +1,7 @@
+V6.2 ADAPTIVE HORIZON
+- Dynamic expiry selection: 1m, 2m, 3m, 4m, 5m
+- Direction and expiry compete together
+- Horizon-specific structural vs micro weighting
+- Evidence-only anti-flip; no time lock
+- Separate applicationId
+- Demo validation required; no win-rate guarantee

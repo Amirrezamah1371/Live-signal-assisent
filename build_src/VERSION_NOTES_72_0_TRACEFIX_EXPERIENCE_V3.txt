@@ -1,0 +1,18 @@
+Live Signal Assistant 72.0.0 TRACEFIX + EXPERIENCE V3 (versionCode 47)
+
+Changes versus 71.7.27 90S EXPERIENCE V2 (R3):
+1. TraceExtractor.kt (new): dark-stroke mask, blob/horizontal-line removal, ROI cut at the sentiment bar, DP continuity.
+2. ChangeEngine.kt (new): cross-frame registration (scroll shift + affine y) so chart auto-scaling is not read as price movement;
+   real 3/6/10/20 s z-scores, velocity, acceleration, jerk, counter-magnitude, persistence decay, flips, window agreement,
+   state = CONTINUING / PULLBACK / EXHAUSTION / REGIME_CHANGE / NOISE / NO_RECENT.
+3. CycleDecider.kt (new): time-based recency, WAIT observations keep a low-weight side, REGIME_CHANGE needs multi-window
+   agreement + persistence + deep retrace + time since extreme; entry quality separate from direction; STRENGTH replaces the clipped score.
+4. ExperienceStore.kt: V3 hierarchical Beta shrinkage over a finite key space; can only damp/boost strength or turn a signal into WAIT; never flips direction.
+5. MainActivity/MemoryExporter: Experience JSON export/import, Experience status line, snapshot in memory export.
+6. build.gradle.kts: fixed non-secret debug keystore so every CI build has the same signature.
+7. res/xml backup rules: Auto Backup includes only permanent_experience (not guaranteed; depends on device/Google backup).
+8. Removed dead TradeOpenDetector.kt.
+Unchanged: 90 s scheduling, monotonic timers, 60 s expiry, manual lock, WIN/LOSS/VOID buttons, export + ZIP verification,
+session clear (touches only sessions/), applicationId, GitHub workflow.
+STRENGTH is an evidence-quality measure, NOT a win probability. No martingale, no auto-trading.
+validation/ holds the Python reference prototypes and the historical replay used for testing (not part of the Android build).

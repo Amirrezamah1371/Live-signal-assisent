@@ -1,0 +1,8 @@
+6.1 REGIME FIRST
+- Separate applicationId: com.example.livesignalassistant.regimefirst
+- 5-minute candidate generation only
+- Regime-first structural veto: strong zoomed-out trend cannot be reversed by a tiny micro wiggle
+- Confirmed structural edge turn / failed break can override macro trend
+- Trend continuation and range-edge reversal are scored separately
+- Event dedup remains setup-state based, not a fixed signal quota
+- No automatic trade execution

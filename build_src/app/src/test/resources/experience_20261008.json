@@ -1,0 +1,102 @@
+{
+ "version": 3,
+ "total_results": 70,
+ "cells": [
+  {
+   "k": "DOWN",
+   "w": 18.397,
+   "l": 12.093
+  },
+  {
+   "k": "DOWN|CONTINUING",
+   "w": 0,
+   "l": 1.85
+  },
+  {
+   "k": "DOWN|CONTINUING|TREND",
+   "w": 0,
+   "l": 1.85
+  },
+  {
+   "k": "DOWN|CONTINUING|TREND|E_HIGH",
+   "w": 0,
+   "l": 0.9
+  },
+  {
+   "k": "DOWN|CONTINUING|TREND|E_LOW",
+   "w": 0,
+   "l": 0.945
+  },
+  {
+   "k": "DOWN|NO_RECENT",
+   "w": 18.397,
+   "l": 10.242
+  },
+  {
+   "k": "DOWN|NO_RECENT|TREND",
+   "w": 18.397,
+   "l": 10.242
+  },
+  {
+   "k": "DOWN|NO_RECENT|TREND|E_HIGH",
+   "w": 5.502,
+   "l": 5.652
+  },
+  {
+   "k": "DOWN|NO_RECENT|TREND|E_LOW",
+   "w": 5.427,
+   "l": 1.823
+  },
+  {
+   "k": "DOWN|NO_RECENT|TREND|E_MID",
+   "w": 7.467,
+   "l": 2.764
+  },
+  {
+   "k": "UP",
+   "w": 19.295,
+   "l": 14.56
+  },
+  {
+   "k": "UP|CONTINUING",
+   "w": 0.836,
+   "l": 0
+  },
+  {
+   "k": "UP|CONTINUING|TREND",
+   "w": 0.836,
+   "l": 0
+  },
+  {
+   "k": "UP|CONTINUING|TREND|E_LOW",
+   "w": 0.836,
+   "l": 0
+  },
+  {
+   "k": "UP|NO_RECENT",
+   "w": 18.459,
+   "l": 14.56
+  },
+  {
+   "k": "UP|NO_RECENT|TREND",
+   "w": 18.459,
+   "l": 14.56
+  },
+  {
+   "k": "UP|NO_RECENT|TREND|E_HIGH",
+   "w": 0.896,
+   "l": 3.782
+  },
+  {
+   "k": "UP|NO_RECENT|TREND|E_LOW",
+   "w": 0.925,
+   "l": 3.67
+  },
+  {
+   "k": "UP|NO_RECENT|TREND|E_MID",
+   "w": 16.632,
+   "l": 7.105
+  }
+ ],
+ "recent": "WWLLLWWWWLWWLLLLWLWWLLLWWLLWWWWLLWLWWWWW"
+}

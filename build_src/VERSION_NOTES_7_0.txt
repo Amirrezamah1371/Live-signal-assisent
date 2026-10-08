@@ -1,0 +1,10 @@
+Live Signal Assistant 7.0 ONE DECISION + MEMORY
+- 60s cycle: observation throughout, publication only at end
+- one minute-level decision: UP / DOWN / WAIT
+- signal bubble left; tap means user opened trade; then locked expiry timer
+- WIN / LOSS / VOID requested at expiry and bubble removed after result
+- 1 fps visual evidence with timestamps
+- JSONL audit timeline for observations, decisions, signals, user execution and results
+- one-click ZIP export to Downloads
+- confidence is CALIBRATING until enough labeled outcomes exist; no invented percentage
+- separate applicationId from 6.3 and 5.7.2

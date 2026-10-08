@@ -1,0 +1,12 @@
+LIVE SIGNAL ASSISTANT 71.7.27 — FINAL RESEARCH BUILD
+
+Base: 71.7.27 HORIZON BRAIN, preserving audited Vision 7.1, late-entry/exhaustion abstention, coherent direction, trajectory diagnostics, manual execution/results, and CALIBRATING confidence.
+
+Final integration:
+- Supported horizons restricted to the project target: 1m, 4m, 5m. 2m/3m are removed.
+- Multi-horizon endpoint evidence remains the expiry selector.
+- WAIT remains a first-class decision when direction/horizon/quality evidence conflicts.
+- Raw model score is never presented as win probability; UI remains CONF: CALIBRATING.
+- No martingale and no automatic trade execution.
+- Memory/export retained for forward/demo validation and later empirical calibration.
+- No invented 75–85% claim: that is the research target and must be demonstrated out-of-sample.

@@ -1,0 +1,25 @@
+TRADER ROBOT 71.7.27 — MULTI-HORIZON ENDPOINT BRAIN
+
+What changed:
+1. Removed the unsupported Logical Risk experiment by starting from the pre-Logical-Risk trajectory source.
+2. Kept the existing audited Direction/Entry gates unchanged.
+3. Every observation now exports the full UP-vs-DOWN score surface for 60/120/180/240/300 seconds.
+4. Expiry is selected from the accumulated endpoint evidence across the whole minute, not from the mode of previously chosen expiry labels.
+5. Keeps ~29 observations/cycle, temporal trajectory diagnostics, compact visual memory, manual EXECUTED and WIN/LOSS/VOID.
+6. CONF remains CALIBRATING. Scores are diagnostic, not probabilities.
+7. No automatic trade execution.
+
+Evidence motivating the change:
+- 040420 sample: 11 WIN / 7 LOSS / 1 VOID; UP60 9W/4L.
+- 053220 Logical-Risk sample: 8 WIN / 13 LOSS; UP60 3W/7L.
+- Logical Risk did not generalize (2W/2L among logical-risk-pass trades).
+- Entry quality, margin, and consistency alone did not separate wins from losses reliably across both samples.
+- Therefore this build does not invent a new quality threshold. It changes the representation of the expiry problem:
+  each horizon is evaluated directly and temporally.
+
+Research basis:
+- Multi-horizon forecasting should preserve horizon-specific information rather than reuse one generic directional label.
+- Financial markets exhibit concept drift; fixed relationships can fail across regimes.
+- Backtest selection must be evaluated out-of-sample to avoid data-snooping/overfitting.
+
+This is an experimental signal-only build. Test on Demo and export memory before judging it.

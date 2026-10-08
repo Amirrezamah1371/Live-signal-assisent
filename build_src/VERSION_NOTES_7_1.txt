@@ -1,0 +1,14 @@
+Live Signal Assistant 7.1 ENGINEERING AUDIT
+Base: 7.0.4 compact bubbles.
+Purpose: side-by-side out-of-sample comparison; does NOT replace 7.0.4.
+Changes driven by first exported memory audit:
+- Separate applicationId so 7.0.4 remains installed.
+- Vision isolates blue/cyan price trace and rejects red/orange trade overlays; continuity tracking + coverage diagnostic.
+- Exhaustion/late-continuation risk becomes WAIT instead of chasing a mature move.
+- Deterministic observation schedule and monotonic 60,000 ms cycle boundaries without cumulative drift.
+- Recent observations receive more temporal weight at minute decision.
+- signal_id follows signal -> opened -> result for exact audit matching.
+- Full analyzer diagnostics exported (structure/momentum/range/regime/exhaustion/volatility/horizon/vision fields).
+- Decision latency and monotonic timestamps exported.
+- Screenshot compression moved to separate evidence executor so it does not block analyzer work.
+- Existing compact bubble behavior and 15s unexecuted timeout retained.

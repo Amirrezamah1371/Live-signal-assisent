@@ -1,0 +1,10 @@
+Live Signal Assistant 5.8.0 FIVE MINUTE EXTREME
+Base: 5.7.2 TIMEFRAME BRAIN FIXED
+- 1 minute horizon removed completely from analyzer.
+- 5 minute core thresholds/weights preserved.
+- Added visible-history extreme-zone guard:
+  lower zone rejects DOWN and favors UP when price is lifting;
+  upper zone rejects UP and favors DOWN when price is rolling over.
+- Middle-range behavior remains based on 5.7.2 scoring.
+- Separate applicationId for side-by-side testing.
+- Manual signals only; no auto-trading.

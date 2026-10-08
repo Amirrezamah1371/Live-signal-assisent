@@ -1,0 +1,1 @@
+5.7.1 FIX: SignalAnalyzer.kt unresolved reference horizonContext corrected by moving horizonContext into evaluateCandidate scope before horizonBonus.

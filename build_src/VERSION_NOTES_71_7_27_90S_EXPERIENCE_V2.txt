@@ -1,0 +1,9 @@
+BASE: LiveSignalAssistant_71.7.27_1M_ADAPTIVE_RECENCY
+- 90s cycle: 80s deep observation + 10s final validation; 1m expiry unchanged.
+- Final window cannot flip direction on ordinary pullback: multi-window slopes + opposite-tail persistence + counter magnitude + persistence decay + jerk must agree.
+- Experience V2 uses similarity-weighted compact setup centroids instead of exact coarse keys.
+- Experience never reverses UP/DOWN. Repeated similar poor outcomes can only veto an entry to WAIT.
+- Small-sample protection: <2 similar samples cannot apply; veto requires >=5 similar samples and poor posterior rate.
+- Permanent experience is outside session memory and survives normal session export/clear; export includes a snapshot.
+- Raw screenshots sampled every 3 seconds to reduce storage; live analysis remains 1Hz/full resolution.
+- Model SCORE remains diagnostic, not a calibrated win probability.

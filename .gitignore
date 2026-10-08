@@ -1,0 +1,5 @@
+build_src/local.properties
+build_src/.gradle/
+build_src/app/build/
+build_src/build/
+build_src/validation/__pycache__/

@@ -1,0 +1,7 @@
+6.3 COHERENT ADAPTIVE
+- One global directional opinion before expiry selection.
+- 1m/2m/3m/4m/5m may compete only after direction is coherent.
+- Conflicting horizon directions => WAIT, never simultaneous contradictory UP/DOWN.
+- Stronger quality/conflict gates.
+- Causal direction persistence with immediate structural reversal allowance.
+- Separate applicationId; does not replace prior versions.
