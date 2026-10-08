@@ -22,13 +22,13 @@ class SeriesStatus(val points: Int, val spanSec: Double, val reason: String)
 /**
  * Cross-frame price series that survives chart auto-scaling.
  *
- * Each accepted frame is aligned to the previous accepted frame (horizontal scroll + affine y).
- * The live tip is excluded from the fit, and the worst 15% of column residuals are trimmed, so a
- * real price move or a few flickered columns is not treated as a failed alignment. Acceptance is
- * still score < 0.30. A single rejected frame does not erase the series or become the new origin.
- * Two consecutive rejects, or a gap over 3.5 s, restart the series as provisional.
- * Features are invalid until the series is non-provisional, has enough span, and its newest point
- * is at most 2.5 s old. Time after the last real point is not filled with a flat price.
+ * Trusted history and a candidate registration are separate. A frame is accepted into the trusted
+ * series only when it aligns to the last trusted polyline (score still < 0.30). A rejected frame
+ * does not become the new origin and does not delete trusted points. Repeated rejects are accumulated
+ * on a candidate track. The candidate replaces trusted history only after it has itself produced a
+ * non-provisional series of at least 8 points spanning 12 seconds. A hole longer than 3.5 s is not
+ * bridged with an invented path. Features stay invalid while the series is provisional, too short,
+ * or its newest real point is more than 2.5 s old. Nothing is filled flat across a missing frame.
  */
 class ChangeEngine {
     private var prevT = -1.0
@@ -45,11 +45,21 @@ class ChangeEngine {
         private set
     private val regLog = ArrayList<Pair<Double, String>>()
 
+    private var candP: DoubleArray? = null
+    private var candReal: BooleanArray? = null
+    private var candT = -1.0
+    private var candA = 1.0
+    private var candB = 0.0
+    private val candTs = ArrayList<Double>()
+    private val candVs = ArrayList<Double>()
+    private var candProv = true
+
     @Synchronized
     fun reset() {
         prevT = -1.0; prevP = null; prevReal = null; scaleA = 1.0; scaleB = 0.0
         ts.clear(); vs.clear(); lastReg = "NEW"; regLog.clear()
         failStreak = 0; provisional = true; lastOkT = -1.0
+        clearCandidate()
     }
 
     @Synchronized fun pointCount(): Int = ts.size
@@ -59,7 +69,8 @@ class ChangeEngine {
         "last" to (vs.lastOrNull() ?: Double.NaN),
         "provisional" to provisional,
         "fail_streak" to failStreak,
-        "last_ok_t" to lastOkT
+        "last_ok_t" to lastOkT,
+        "candidate_points" to candTs.size
     )
 
     /**
@@ -123,6 +134,7 @@ class ChangeEngine {
             val from = max(0, p.size - 3)
             for (i in from until p.size) vals.add(p[i])
         }
+        if (vals.isEmpty()) return 0.0
         val s = vals.sorted()
         return s[s.size / 2]
     }
@@ -132,6 +144,11 @@ class ChangeEngine {
         provisional = true; lastOkT = -1.0
     }
 
+    private fun clearCandidate() {
+        candP = null; candReal = null; candT = -1.0; candA = 1.0; candB = 0.0
+        candTs.clear(); candVs.clear(); candProv = true
+    }
+
     private fun appendPoint(t: Double, p: DoubleArray, real: BooleanArray?) {
         val med = tailMedian(p, real)
         val v = scaleA * med + scaleB
@@ -139,56 +156,95 @@ class ChangeEngine {
         while (ts.isNotEmpty() && t - ts[0] > 45.0) { ts.removeAt(0); vs.removeAt(0) }
     }
 
+    /** Drop points that sit before a hole. The hole is not filled. */
+    private fun usableStart(): Int {
+        var s = 0
+        for (i in 1 until ts.size) if (ts[i] - ts[i - 1] > 3.5) s = i
+        return s
+    }
+
+    private fun seedTrusted(t: Double, p: DoubleArray, real: BooleanArray?) {
+        wipeSeries()
+        clearCandidate()
+        prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
+        appendPoint(t, p, real)
+        provisional = true
+    }
+
+    private fun seedCandidate(t: Double, p: DoubleArray, real: BooleanArray?) {
+        candP = p.copyOf(); candReal = real?.copyOf(); candT = t
+        candA = 1.0; candB = 0.0; candProv = true
+        candTs.clear(); candVs.clear()
+        candTs.add(t); candVs.add(tailMedian(p, real))
+    }
+
+    private fun promoteCandidate() {
+        ts.clear(); ts.addAll(candTs)
+        vs.clear(); vs.addAll(candVs)
+        scaleA = candA; scaleB = candB
+        prevP = candP?.copyOf(); prevReal = candReal?.copyOf(); prevT = candT
+        provisional = false; lastOkT = candT; failStreak = 0
+        regLog.clear()
+        // The candidate already earned these accepts. The promoting frame is logged by update().
+        for (i in 0 until candTs.size - 1) regLog.add(Pair(candTs[i], "OK"))
+        clearCandidate()
+    }
+
     /** p: path with price-up positive (pixel units). real: true where that column was actually seen. t: monotonic seconds. */
     @Synchronized
     fun update(t: Double, p: DoubleArray, real: BooleanArray? = null): Map<String, Any?> {
-        var reg = "NEW"; var shift = 0.0; var aUsed = 1.0
+        var reg = "NEW"; var logStatus = "NEW"; var shift = 0.0; var aUsed = 1.0
         var reason = "NO_PREVIOUS_FRAME"
         var dScore = -1.0; var dShift = -1.0; var dARaw = 0.0; var dB = 0.0; var dLen = 0; var dRes = -1.0; var dClamped = false
         val pp = prevP
         val prevTBefore = prevT
         val oldN = pp?.size ?: 0
-        if (pp == null) {
-            prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
-            appendPoint(t, p, real)
-            provisional = true
-        } else if (t - prevT <= 3.5 && t > prevT) {
+            if (pp == null) {
+            seedTrusted(t, p, real)
+            logStatus = "NEW"
+        } else if (t <= prevT) {
+            reg = "GAP"; logStatus = "GAP"; reason = "TIME_NOT_ADVANCING"
+        } else {
             val r = register(pp, p, prevReal, real)
             if (r != null) {
                 dScore = r[0]; dShift = r[1]; dARaw = r[4]; dB = r[3]; dLen = r[5].toInt(); dRes = r[6]; dClamped = abs(r[4] - r[2]) > 1e-9
             }
             if (r != null && r[0] < 0.30) {
-                shift = r[1]; aUsed = r[2]; reg = "OK"; reason = "ACCEPTED"
+                shift = r[1]; aUsed = r[2]; reg = "OK"; logStatus = "OK"; reason = "ACCEPTED"
                 scaleB = scaleB - scaleA * r[3] / r[2]
                 scaleA = scaleA / r[2]
                 prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
                 appendPoint(t, p, real)
                 failStreak = 0; provisional = false; lastOkT = t
+                clearCandidate()
             } else {
                 failStreak++
-                reg = "FAIL"
                 val why = if (r == null) "NO_VALID_SHIFT" else if (dClamped) "SCORE_ABOVE_0.30_SCALE_CLAMPED" else "SCORE_ABOVE_0.30"
-                if (failStreak >= 2) {
-                    wipeSeries()
-                    prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
-                    appendPoint(t, p, real)
-                    failStreak = 0
-                    reason = "RESET_$why"
+                val unconfirmed = provisional && ts.size < 8
+                val lostTooLong = lastOkT >= 0.0 && t - lastOkT > 15.0
+                if (unconfirmed || lostTooLong) {
+                    // The old geometry is not evidence anymore. This frame starts a new provisional
+                    // seed. It is not appended onto the prices it failed to match.
+                    seedTrusted(t, p, real)
+                    reg = if (lostTooLong) "GAP" else "FAIL"
+                    logStatus = reg
+                    reason = if (lostTooLong) "INVALIDATED_$why" else "SEED_$why"
                 } else {
-                    reason = "HELD_$why"
+                    reason = holdOnCandidate(t, p, real, why)
+                    // The frame is still a failed accept. Trust ignores it, because trusted history was not changed.
+                    if (reason == "PROMOTED_CANDIDATE") {
+                        reg = "OK"; logStatus = "OK"
+                    } else {
+                        reg = "FAIL"; logStatus = "HOLD"
+                    }
                 }
             }
-        } else {
-            reg = "GAP"
-            reason = if (t <= prevT) "TIME_NOT_ADVANCING" else "FRAME_GAP_OVER_3.5S"
-            wipeSeries()
-            prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
-            appendPoint(t, p, real)
-            failStreak = 0
         }
-        lastReg = reg
-        regLog.add(Pair(t, reg))
-        while (regLog.isNotEmpty() && t - regLog[0].first > 45.0) regLog.removeAt(0)
+        if (reason != "TIME_NOT_ADVANCING") {
+            lastReg = reg
+            regLog.add(Pair(t, logStatus))
+            while (regLog.isNotEmpty() && t - regLog[0].first > 45.0) regLog.removeAt(0)
+        }
         val v = if (vs.isEmpty()) 0.0 else vs.last()
         return mapOf(
             "reg_status" to reg, "reg_shift" to shift, "reg_a" to aUsed, "ref_v" to v, "ref_points" to ts.size,
@@ -196,16 +252,45 @@ class ChangeEngine {
             "reg_a_clamped" to dClamped,
             "reg_b" to dB, "reg_overlap_len" to dLen, "reg_resid_rel" to dRes,
             "reg_old_n" to oldN, "reg_new_n" to p.size, "reg_t" to t, "reg_prev_t" to prevTBefore,
-            "reg_provisional" to provisional, "reg_fail_streak" to failStreak
+            "reg_provisional" to provisional, "reg_fail_streak" to failStreak,
+            "reg_candidate_points" to candTs.size
         )
+    }
+
+    /**
+     * Trusted polyline and trusted prices stay put. The failed frame can only extend a separate
+     * candidate, and only that candidate's own accepts count toward replacing trusted history.
+     */
+    private fun holdOnCandidate(t: Double, p: DoubleArray, real: BooleanArray?, why: String): String {
+        val cp = candP
+        if (cp != null && t > candT && t - candT <= 3.5) {
+            val cr = register(cp, p, candReal, real)
+            if (cr != null && cr[0] < 0.30) {
+                candB = candB - candA * cr[3] / cr[2]
+                candA = candA / cr[2]
+                candP = p.copyOf(); candReal = real?.copyOf(); candT = t; candProv = false
+                val med = tailMedian(p, real)
+                candTs.add(t); candVs.add(candA * med + candB)
+                while (candTs.isNotEmpty() && t - candTs[0] > 45.0) { candTs.removeAt(0); candVs.removeAt(0) }
+                val span = candTs.last() - candTs[0]
+                if (!candProv && candTs.size >= 8 && span >= 12.0) {
+                    promoteCandidate()
+                    return "PROMOTED_CANDIDATE"
+                }
+                return "CANDIDATE_ACCEPTED"
+            }
+        }
+        seedCandidate(t, p, real)
+        return "HELD_$why"
     }
 
     /** Honest series state for logging. Does not itself publish a direction. */
     @Synchronized
     fun seriesStatus(tNow: Double): SeriesStatus {
-        val n = ts.size
-        if (n == 0) return SeriesStatus(0, 0.0, "EMPTY")
-        val span = ts.last() - ts[0]
+        if (ts.isEmpty()) return SeriesStatus(0, 0.0, "EMPTY")
+        val s0 = usableStart()
+        val n = ts.size - s0
+        val span = ts.last() - ts[s0]
         val tailAge = tNow - ts.last()
         val reason = when {
             provisional -> "PROVISIONAL"
@@ -218,12 +303,17 @@ class ChangeEngine {
         return SeriesStatus(n, span, reason)
     }
 
-    /** [ok, fail, gap, new] registration counts in the last windowSec seconds (logging and the trust gate). */
+    /** [ok, fail, gap, hold] in the last windowSec seconds. Hold means the frame was refused and trusted history was kept. */
     @Synchronized
     fun regHistory(tNow: Double, windowSec: Double): IntArray {
         val c = IntArray(4)
         for (e in regLog) if (tNow - e.first <= windowSec) {
-            when (e.second) { "OK" -> c[0]++; "FAIL" -> c[1]++; "GAP" -> c[2]++; else -> c[3]++ }
+            when (e.second) {
+                "OK" -> c[0]++
+                "FAIL" -> c[1]++
+                "GAP" -> c[2]++
+                "HOLD" -> c[3]++
+            }
         }
         return c
     }
@@ -238,16 +328,19 @@ class ChangeEngine {
 
     private fun grid(tNow: Double): DoubleArray? {
         if (provisional || ts.size < 8) return null
+        val s0 = usableStart()
+        if (ts.size - s0 < 8) return null
         val lastT = ts.last()
         if (tNow - lastT > 2.5) return null
         val tRef = min(tNow, lastT)
-        if (tRef - ts[0] < 12.0) return null
-        val w = min(30.0, tRef - ts[0]).toInt()
+        if (tRef - ts[s0] < 12.0) return null
+        val w = min(30.0, tRef - ts[s0]).toInt()
         val g = DoubleArray(w + 1)
-        var seg = 0
+        var seg = s0
         for (i in 0..w) {
             val tg = tRef - (w - i).toDouble()
             while (seg < ts.size - 2 && ts[seg + 1] < tg) seg++
+            if (seg < s0) seg = s0
             val t0 = ts[seg]; val t1 = ts[min(seg + 1, ts.size - 1)]
             val f = if (t1 > t0) ((tg - t0) / (t1 - t0)).coerceIn(0.0, 1.0) else 0.0
             val v1 = vs[min(seg + 1, vs.size - 1)]
@@ -341,7 +434,7 @@ class ChangeEngine {
         }
         return ChangeFeatures(
             true, z3, z6, z10, z20, v3, acc, jerk, counter, sincePeak, decay, flips, agree, velRatio,
-            against, impz, er, state, u, ts.size, ts.last() - ts[0]
+            against, impz, er, state, u, ts.size - usableStart(), ts.last() - ts[usableStart()]
         )
     }
 }

@@ -9,7 +9,7 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="Live Signal Assistant 72.0.2 FORENSIC"
+        android:label="Live Signal Assistant 72.0.3 REPAIR"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity
