@@ -9,7 +9,7 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="Trader Robot 72.0.2 Forensic"
+        android:label="Live Signal Assistant 72.0.2 FORENSIC"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity

@@ -8,7 +8,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.livesignalassistant.recency71727expv2r3"
+        applicationId = "com.example.livesignalassistant.forensic7202"
         minSdk = 26
         targetSdk = 35
         versionCode = 49
