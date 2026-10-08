@@ -1,0 +1,18 @@
+Live Signal Assistant 72.0.1 DIAG LOGGING (versionCode 48)
+
+Logging/instrumentation ONLY. Trading behaviour is identical to 72.0.0:
+signal logic, STR, Experience V3, WAIT, Entry Quality, registration acceptance (score < 0.30), all thresholds, 90 s timing, 60 s expiry,
+applicationId and permanent Experience path are unchanged.
+
+New in BOT_OBSERVATION diagnostics (one per observation):
+ - trace_b64        deflate+Base64 of the extracted trace (pixel rows + real-pick bit mask); decode with validation/decode_trace.py
+ - bmp_w, bmp_h, trace_step_px, trace_roi_top  extractor geometry
+ - reg_status       OK / FAIL / GAP / NEW (as before)
+ - reg_reason       ACCEPTED, SCORE_ABOVE_0.30, SCORE_ABOVE_0.30_SCALE_CLAMPED, NO_VALID_SHIFT, FRAME_GAP_OVER_3.5S, TIME_NOT_ADVANCING, NO_PREVIOUS_FRAME
+ - reg_score, reg_resid_rel, reg_best_shift, reg_a_raw, reg_a_clamped, reg_b, reg_overlap_len, reg_old_n, reg_new_n, reg_t, reg_prev_t
+In NINETY_SECOND_DECISION / SIGNAL_PUBLISHED diagnostics:
+ - series_points / series_span_s  now the REAL number of points and span in the series (were 0 whenever Recent Features were invalid)
+ - recent_valid, recent_invalid_reason (OK, EMPTY, TOO_FEW_POINTS, SPAN_TOO_SHORT, TOO_FEW_AND_TOO_SHORT)
+ - reg_ok_20s, reg_fail_20s, reg_gap_20s, reg_new_20s  registration outcomes in the last 20 s
+validation/analyze_registration.py <Memory ZIP> rebuilds every registration offline from the logged traces and explains the FAILs.
+Expected cost: ~600-900 extra characters per observation line (about 1 MB per 30 min session).

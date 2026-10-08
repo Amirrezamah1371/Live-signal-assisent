@@ -1,0 +1,7 @@
+7.0.3 UI + EXPORT FIX
+- SignalAnalyzer.kt is byte-for-byte unchanged from tested 7.0.
+- Export no longer starts CaptureService; it runs independently from MainActivity and saves all existing sessions to Downloads.
+- Export errors are caught and shown instead of closing the app.
+- Signal bubbles stack vertically and unexecuted bubbles expire after 15 seconds.
+- Bubble shows CONF: CALIBRATING and diagnostic SCORE/100. SCORE is not presented as a calibrated win probability.
+- Existing 7.0 applicationId is preserved so installing as an update can preserve app-private test memory.

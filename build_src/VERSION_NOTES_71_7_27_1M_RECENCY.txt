@@ -1,0 +1,8 @@
+71.7.27 1M ADAPTIVE RECENCY
+
+Base: 71.7.27 1M PRECISE.
+Preserved: timer, base Direction Engine, signal gates, overlay, lock, memory/export, 60s horizon.
+Added: lightweight last-moment direction correction only.
+The correction requires agreement across 3/6/10 recent usable observations plus change evidence (persistence break, counter impulse, or jerk).
+It does not create WAIT, quotas, cooldowns, or automatic trades.
+Separate applicationId allows A/B installation next to PRECISE.

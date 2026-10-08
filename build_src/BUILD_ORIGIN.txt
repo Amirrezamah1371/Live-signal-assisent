@@ -1,0 +1,5 @@
+TIMEFRAME BRAIN 5.7
+Direct base: V5.5 MATURE RESTORED
+1m: stronger timing/context/anti-flip.
+5m: benchmark core retained with mild context/exhaustion/reversal strengthening.
+No auto-trading. Demo validation required.

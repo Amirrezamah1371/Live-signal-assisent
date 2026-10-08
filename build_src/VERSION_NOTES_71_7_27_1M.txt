@@ -1,0 +1,14 @@
+Live Signal Assistant 71.7.27-1M
+
+- Built from the READY_TO_UPLOAD 71.7.27 source that successfully built/installed.
+- Fixed timeframe/horizon: 1 minute / 60 seconds only.
+- No 4m/5m horizon selection.
+- Path analysis samples one analyzed observation per second across the minute.
+- Capture may inspect frames faster, while decision timing uses Android monotonic clock.
+- Locked trade expiry uses elapsedRealtimeNanos with a 60,000,000,000 ns target and centisecond display.
+- UP/DOWN are scored symmetrically; WAIT remains valid for weak/conflicting/unstable setups.
+- Sudden volatility is evaluated as structure/conflict/exhaustion evidence, not blindly followed.
+- Moderate gates are used to avoid both signal spam and permanent WAIT.
+- No signal-per-hour quota and no promised win rate.
+- Model SCORE is diagnostic, not a calibrated probability.
+- Existing overlay, manual lock, WIN/LOSS/VOID, memory and export remain.

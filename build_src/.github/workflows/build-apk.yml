@@ -1,4 +1,4 @@
-name: Build Live Signal Assistant 72.0.1
+name: Build Live Signal Assistant
 
 "on":
   push:
@@ -9,9 +9,8 @@ name: Build Live Signal Assistant 72.0.1
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 17
@@ -20,18 +19,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Gradle 8.10.2
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
 
       - name: Build APK
-        working-directory: build_src
-        run: gradle --no-daemon assembleDebug --stacktrace
+        run: gradle --no-daemon clean assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-72.0.1-DIAG-LOGGING
-          path: build_src/app/build/outputs/apk/debug/app-debug.apk
+          name: LiveSignalAssistant-71.7.27
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

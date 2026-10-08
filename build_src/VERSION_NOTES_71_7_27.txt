@@ -1,0 +1,8 @@
+Live Signal Assistant 71.7.27
+- Separate applicationId; installs beside 7.1.
+- SignalAnalyzer/CaptureService trading brain preserved from 7.1.
+- Export ZIP is fully read/CRC-verified before deletion is offered.
+- After successful export: KEEP MEMORY or DELETE EXPORTED MEMORY.
+- Separate CLEAR TEST MEMORY with confirmation.
+- Clear stops capture service first to avoid deleting a live session while it is being written.
+- Downloaded ZIP is never deleted by memory clear.
