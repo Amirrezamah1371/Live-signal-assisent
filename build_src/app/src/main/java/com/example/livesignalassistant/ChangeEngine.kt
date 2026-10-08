@@ -21,41 +21,77 @@ class SeriesStatus(val points: Int, val spanSec: Double, val reason: String)
 
 /**
  * Cross-frame price series that survives chart auto-scaling.
- * Each new frame's path is registered against the previous frame's path (horizontal scroll shift +
- * affine y mapping a*y+b). The mapping is chained into a single reference scale, so a chart rescale
- * is NOT read as market movement. If registration fails (or frames are >3.5 s apart, e.g. Android
- * paused the app) the series restarts instead of inventing continuity.
+ *
+ * Each accepted frame is aligned to the previous accepted frame (horizontal scroll + affine y).
+ * The live tip is excluded from the fit, and the worst 15% of column residuals are trimmed, so a
+ * real price move or a few flickered columns is not treated as a failed alignment. Acceptance is
+ * still score < 0.30. A single rejected frame does not erase the series or become the new origin.
+ * Two consecutive rejects, or a gap over 3.5 s, restart the series as provisional.
+ * Features are invalid until the series is non-provisional, has enough span, and its newest point
+ * is at most 2.5 s old. Time after the last real point is not filled with a flat price.
  */
 class ChangeEngine {
     private var prevT = -1.0
     private var prevP: DoubleArray? = null
+    private var prevReal: BooleanArray? = null
     private var scaleA = 1.0
     private var scaleB = 0.0
     private val ts = ArrayList<Double>()
     private val vs = ArrayList<Double>()
+    private var failStreak = 0
+    private var provisional = true
+    private var lastOkT = -1.0
     var lastReg = "NEW"
         private set
     private val regLog = ArrayList<Pair<Double, String>>()
 
     @Synchronized
     fun reset() {
-        prevT = -1.0; prevP = null; scaleA = 1.0; scaleB = 0.0; ts.clear(); vs.clear(); lastReg = "NEW"; regLog.clear()
+        prevT = -1.0; prevP = null; prevReal = null; scaleA = 1.0; scaleB = 0.0
+        ts.clear(); vs.clear(); lastReg = "NEW"; regLog.clear()
+        failStreak = 0; provisional = true; lastOkT = -1.0
     }
 
-    /** returns [score, shift, a, b, aRaw, overlapLen, relativeResidual] or null (indexes 0..3 drive the decision; 4..6 are diagnostics only) */
-    private fun register(old: DoubleArray, nw: DoubleArray): DoubleArray? {
+    @Synchronized fun pointCount(): Int = ts.size
+
+    @Synchronized fun debugState(): Map<String, Any> = mapOf(
+        "points" to ts.size,
+        "last" to (vs.lastOrNull() ?: Double.NaN),
+        "provisional" to provisional,
+        "fail_streak" to failStreak,
+        "last_ok_t" to lastOkT
+    )
+
+    /**
+     * returns [score, shift, a, b, aRaw, overlapLen, relativeResidual] or null.
+     * Indexes 0..3 drive the decision; 4..6 are diagnostics only.
+     */
+    private fun register(old: DoubleArray, nw: DoubleArray, oldReal: BooleanArray?, newReal: BooleanArray?): DoubleArray? {
         val n0 = old.size
         val maxShift = max(3, n0 / 8)
+        val tail = max(6, nw.size / 10)
+        val need = max(24, (0.40 * min(n0, nw.size)).toInt())
         var best: DoubleArray? = null
         for (s in 0..maxShift) {
-            val len = min(n0 - s, nw.size) - 3
-            if (len < max(30, (0.5 * n0).toInt())) continue
+            val maxLen = min(n0 - s, nw.size) - tail
+            if (maxLen < need) continue
+            val xs = ArrayList<Double>(maxLen)
+            val ys = ArrayList<Double>(maxLen)
+            for (i in 0 until maxLen) {
+                val oi = s + i
+                if (oi !in old.indices || i !in nw.indices) continue
+                if (oldReal != null && (oi >= oldReal.size || !oldReal[oi])) continue
+                if (newReal != null && (i >= newReal.size || !newReal[i])) continue
+                xs.add(old[oi]); ys.add(nw[i])
+            }
+            val len = xs.size
+            if (len < need) continue
             var mx = 0.0; var my = 0.0
-            for (i in 0 until len) { mx += old[s + i]; my += nw[i] }
+            for (i in 0 until len) { mx += xs[i]; my += ys[i] }
             mx /= len; my /= len
             var vx = 0.0; var cov = 0.0; var vy = 0.0
             for (i in 0 until len) {
-                val dx = old[s + i] - mx; val dy = nw[i] - my
+                val dx = xs[i] - mx; val dy = ys[i] - my
                 vx += dx * dx; cov += dx * dy; vy += dy * dy
             }
             vx /= len; cov /= len; vy /= len
@@ -63,26 +99,61 @@ class ChangeEngine {
             val aRaw = cov / vx
             val a = aRaw.coerceIn(0.35, 2.8)
             val b = my - a * mx
+            val absErr = DoubleArray(len) { i -> abs(ys[i] - (a * xs[i] + b)) }
+            absErr.sort()
+            val keep = max(1, (len * 0.85).toInt())
             var sse = 0.0
-            for (i in 0 until len) { val e = nw[i] - (a * old[s + i] + b); sse += e * e }
-            val res = sqrt(sse / len) / (sqrt(vy) + 1e-9)
+            for (i in 0 until keep) sse += absErr[i] * absErr[i]
+            val res = sqrt(sse / keep) / (sqrt(vy) + 1e-9)
             val sc = res + (if (abs(aRaw - a) > 1e-9) 1.0 else 0.0)
             if (best == null || sc < best[0]) best = doubleArrayOf(sc, s.toDouble(), a, b, aRaw, len.toDouble(), res)
         }
         return best
     }
 
-    /** p: path with price-up positive (pixel units). t: monotonic seconds. */
+    private fun tailMedian(p: DoubleArray, real: BooleanArray?): Double {
+        val vals = ArrayList<Double>(3)
+        if (real != null && real.size == p.size) {
+            for (i in p.lastIndex downTo 0) {
+                if (real[i]) vals.add(p[i])
+                if (vals.size == 3) break
+            }
+        }
+        if (vals.isEmpty()) {
+            val from = max(0, p.size - 3)
+            for (i in from until p.size) vals.add(p[i])
+        }
+        val s = vals.sorted()
+        return s[s.size / 2]
+    }
+
+    private fun wipeSeries() {
+        ts.clear(); vs.clear(); scaleA = 1.0; scaleB = 0.0; regLog.clear()
+        provisional = true; lastOkT = -1.0
+    }
+
+    private fun appendPoint(t: Double, p: DoubleArray, real: BooleanArray?) {
+        val med = tailMedian(p, real)
+        val v = scaleA * med + scaleB
+        ts.add(t); vs.add(v)
+        while (ts.isNotEmpty() && t - ts[0] > 45.0) { ts.removeAt(0); vs.removeAt(0) }
+    }
+
+    /** p: path with price-up positive (pixel units). real: true where that column was actually seen. t: monotonic seconds. */
     @Synchronized
-    fun update(t: Double, p: DoubleArray): Map<String, Any?> {
+    fun update(t: Double, p: DoubleArray, real: BooleanArray? = null): Map<String, Any?> {
         var reg = "NEW"; var shift = 0.0; var aUsed = 1.0
         var reason = "NO_PREVIOUS_FRAME"
         var dScore = -1.0; var dShift = -1.0; var dARaw = 0.0; var dB = 0.0; var dLen = 0; var dRes = -1.0; var dClamped = false
         val pp = prevP
         val prevTBefore = prevT
         val oldN = pp?.size ?: 0
-        if (pp != null && t - prevT <= 3.5 && t > prevT) {
-            val r = register(pp, p)
+        if (pp == null) {
+            prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
+            appendPoint(t, p, real)
+            provisional = true
+        } else if (t - prevT <= 3.5 && t > prevT) {
+            val r = register(pp, p, prevReal, real)
             if (r != null) {
                 dScore = r[0]; dShift = r[1]; dARaw = r[4]; dB = r[3]; dLen = r[5].toInt(); dRes = r[6]; dClamped = abs(r[4] - r[2]) > 1e-9
             }
@@ -90,42 +161,64 @@ class ChangeEngine {
                 shift = r[1]; aUsed = r[2]; reg = "OK"; reason = "ACCEPTED"
                 scaleB = scaleB - scaleA * r[3] / r[2]
                 scaleA = scaleA / r[2]
+                prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
+                appendPoint(t, p, real)
+                failStreak = 0; provisional = false; lastOkT = t
             } else {
-                reg = "FAIL"; ts.clear(); vs.clear(); scaleA = 1.0; scaleB = 0.0
-                reason = if (r == null) "NO_VALID_SHIFT" else if (abs(r[4] - r[2]) > 1e-9) "SCORE_ABOVE_0.30_SCALE_CLAMPED" else "SCORE_ABOVE_0.30"
+                failStreak++
+                reg = "FAIL"
+                val why = if (r == null) "NO_VALID_SHIFT" else if (dClamped) "SCORE_ABOVE_0.30_SCALE_CLAMPED" else "SCORE_ABOVE_0.30"
+                if (failStreak >= 2) {
+                    wipeSeries()
+                    prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
+                    appendPoint(t, p, real)
+                    failStreak = 0
+                    reason = "RESET_$why"
+                } else {
+                    reason = "HELD_$why"
+                }
             }
-        } else if (pp != null) {
-            reg = "GAP"; ts.clear(); vs.clear(); scaleA = 1.0; scaleB = 0.0
+        } else {
+            reg = "GAP"
             reason = if (t <= prevT) "TIME_NOT_ADVANCING" else "FRAME_GAP_OVER_3.5S"
+            wipeSeries()
+            prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
+            appendPoint(t, p, real)
+            failStreak = 0
         }
-        prevP = p; prevT = t; lastReg = reg
+        lastReg = reg
         regLog.add(Pair(t, reg))
         while (regLog.isNotEmpty() && t - regLog[0].first > 45.0) regLog.removeAt(0)
-        val tail = p.copyOfRange(max(0, p.size - 3), p.size).sorted()
-        val med = tail[tail.size / 2]
-        val v = scaleA * med + scaleB
-        ts.add(t); vs.add(v)
-        while (ts.isNotEmpty() && t - ts[0] > 45.0) { ts.removeAt(0); vs.removeAt(0) }
+        val v = if (vs.isEmpty()) 0.0 else vs.last()
         return mapOf(
             "reg_status" to reg, "reg_shift" to shift, "reg_a" to aUsed, "ref_v" to v, "ref_points" to ts.size,
             "reg_reason" to reason, "reg_score" to dScore, "reg_best_shift" to dShift, "reg_a_raw" to dARaw,
             "reg_a_clamped" to dClamped,
             "reg_b" to dB, "reg_overlap_len" to dLen, "reg_resid_rel" to dRes,
-            "reg_old_n" to oldN, "reg_new_n" to p.size, "reg_t" to t, "reg_prev_t" to prevTBefore
+            "reg_old_n" to oldN, "reg_new_n" to p.size, "reg_t" to t, "reg_prev_t" to prevTBefore,
+            "reg_provisional" to provisional, "reg_fail_streak" to failStreak
         )
     }
 
-    /** Honest series state for logging: real point count/span and why Recent Features are (in)valid. Does not influence decisions. */
+    /** Honest series state for logging. Does not itself publish a direction. */
     @Synchronized
     fun seriesStatus(tNow: Double): SeriesStatus {
         val n = ts.size
         if (n == 0) return SeriesStatus(0, 0.0, "EMPTY")
-        val span = tNow - ts[0]
-        val reason = if (n < 8 && span < 12.0) "TOO_FEW_AND_TOO_SHORT" else if (n < 8) "TOO_FEW_POINTS" else if (span < 12.0) "SPAN_TOO_SHORT" else "OK"
+        val span = ts.last() - ts[0]
+        val tailAge = tNow - ts.last()
+        val reason = when {
+            provisional -> "PROVISIONAL"
+            tailAge > 2.5 -> "STALE_TAIL"
+            n < 8 && span < 12.0 -> "TOO_FEW_AND_TOO_SHORT"
+            n < 8 -> "TOO_FEW_POINTS"
+            span < 12.0 -> "SPAN_TOO_SHORT"
+            else -> "OK"
+        }
         return SeriesStatus(n, span, reason)
     }
 
-    /** [ok, fail, gap, new] registration counts in the last windowSec seconds (logging only). */
+    /** [ok, fail, gap, new] registration counts in the last windowSec seconds (logging and the trust gate). */
     @Synchronized
     fun regHistory(tNow: Double, windowSec: Double): IntArray {
         val c = IntArray(4)
@@ -135,17 +228,30 @@ class ChangeEngine {
         return c
     }
 
+    /** Recent accepted registrations dominate, and the newest acceptance is not stale. */
+    @Synchronized
+    fun registrationTrusted(tNow: Double): Boolean {
+        if (provisional || lastOkT < 0.0 || tNow - lastOkT > 2.5) return false
+        val h = regHistory(tNow, 20.0)
+        return h[0] >= 8 && h[1] * 4 <= h[0]
+    }
+
     private fun grid(tNow: Double): DoubleArray? {
-        if (ts.size < 8 || tNow - ts[0] < 12.0) return null
-        val w = min(30.0, tNow - ts[0]).toInt()
+        if (provisional || ts.size < 8) return null
+        val lastT = ts.last()
+        if (tNow - lastT > 2.5) return null
+        val tRef = min(tNow, lastT)
+        if (tRef - ts[0] < 12.0) return null
+        val w = min(30.0, tRef - ts[0]).toInt()
         val g = DoubleArray(w + 1)
         var seg = 0
         for (i in 0..w) {
-            val tg = tNow - (w - i).toDouble()
+            val tg = tRef - (w - i).toDouble()
             while (seg < ts.size - 2 && ts[seg + 1] < tg) seg++
-            val t0 = ts[seg]; val t1 = ts[seg + 1]
+            val t0 = ts[seg]; val t1 = ts[min(seg + 1, ts.size - 1)]
             val f = if (t1 > t0) ((tg - t0) / (t1 - t0)).coerceIn(0.0, 1.0) else 0.0
-            g[i] = vs[seg] + (vs[seg + 1] - vs[seg]) * f
+            val v1 = vs[min(seg + 1, vs.size - 1)]
+            g[i] = vs[seg] + (v1 - vs[seg]) * f
         }
         return g
     }
@@ -235,7 +341,7 @@ class ChangeEngine {
         }
         return ChangeFeatures(
             true, z3, z6, z10, z20, v3, acc, jerk, counter, sincePeak, decay, flips, agree, velRatio,
-            against, impz, er, state, u, ts.size, tNow - ts[0]
+            against, impz, er, state, u, ts.size, ts.last() - ts[0]
         )
     }
 }

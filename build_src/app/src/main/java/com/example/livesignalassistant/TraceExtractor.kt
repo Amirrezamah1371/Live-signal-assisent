@@ -16,7 +16,8 @@ class TraceResult(
     val roiTop: Int,
     val roiBottom: Int,
     val quality: Double,
-    val stepPx: Int = 0
+    val stepPx: Int = 0,
+    val tipGapFrac: Double = 0.0
 )
 
 /**
@@ -132,14 +133,33 @@ object TraceExtractor {
             if (mask[yy * rw + xx].toInt() == 1 && boxSum(xx, yy) > 0) mask[yy * rw + xx] = 0
         }
 
-        // 3) full-width horizontal lines (current price line, trade lines)
-        for (yy in 0 until rh) {
-            var cnt = 0
-            for (xx in 0 until rw) cnt += mask[yy * rw + xx].toInt()
-            if (cnt > 0.35 * rw) {
-                for (d in -1..1) {
-                    val ry = yy + d
-                    if (ry in 0 until rh) for (xx in 0 until rw) mask[ry * rw + xx] = 0
+        // 3) Full-width horizontal HUD lines (price level, trade line).
+        // A flat price trace is itself horizontal, so delete these rows only when a separate
+        // structure still holds at least 30% of the mask pixels.
+        run {
+            val rowCount = IntArray(rh)
+            var total = 0
+            for (yy in 0 until rh) {
+                var cnt = 0
+                for (xx in 0 until rw) cnt += mask[yy * rw + xx].toInt()
+                rowCount[yy] = cnt
+                total += cnt
+            }
+            if (total > 0) {
+                val bar = (0.60 * rw).toInt()
+                var horiz = 0
+                val horizRows = ArrayList<Int>()
+                for (yy in 0 until rh) if (rowCount[yy] > bar) {
+                    horiz += rowCount[yy]
+                    horizRows.add(yy)
+                }
+                if (horizRows.isNotEmpty() && (total - horiz) > 0.30 * total) {
+                    for (yy in horizRows) {
+                        for (d in -1..1) {
+                            val ry = yy + d
+                            if (ry in 0 until rh) for (xx in 0 until rw) mask[ry * rw + xx] = 0
+                        }
+                    }
                 }
             }
         }
@@ -244,12 +264,13 @@ object TraceExtractor {
             realCount++
         }
         if (realCount < 10 || lo < 0) return null
-        val n = hi - lo + 1
+        // Fixed width: cropping to the first/last hit made the path length flicker and broke registration.
+        val n = nCols
         val ys = DoubleArray(n)
         val real = BooleanArray(n)
         for (i in 0 until n) {
-            real[i] = has[lo + i]
-            ys[i] = pick[lo + i] + y0
+            real[i] = has[i]
+            if (has[i]) ys[i] = pick[i] + y0
         }
         // linear interpolation across gaps
         var i = 0
@@ -270,8 +291,9 @@ object TraceExtractor {
         for (m in 1 until n) if (real[m] && real[m - 1]) maxJump = max(maxJump, abs(ys[m] - ys[m - 1]) / rh)
         val realFrac = realCount.toDouble() / n
         val ambiguity = multi.toDouble() / max(1, n)
+        val tipGapFrac = if (hi < 0) 1.0 else (nCols - 1 - hi).coerceAtLeast(0).toDouble() / nCols
         val q = (((realFrac - 0.35) / 0.5).coerceIn(0.0, 1.0)) *
             (1.0 - 0.3 * ((maxJump - 0.2) / 0.4).coerceIn(0.0, 1.0))
-        return TraceResult(ys, real, realFrac, ambiguity, maxJump, bar > 0, y0, y1, q, step)
+        return TraceResult(ys, real, realFrac, ambiguity, maxJump, bar > 0, y0, y1, q, step, tipGapFrac)
     }
 }

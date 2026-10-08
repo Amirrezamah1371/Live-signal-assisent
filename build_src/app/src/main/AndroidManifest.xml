@@ -9,7 +9,7 @@
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="Trader Robot 72.0.1 Diag"
+        android:label="Trader Robot 72.0.2 Forensic"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity

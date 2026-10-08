@@ -14,12 +14,14 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+object AppStorageLock
+
 class MemoryStore(private val ctx: Context) {
     private val sessionId = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
     private val dir = File(ctx.filesDir, "sessions/$sessionId").apply { mkdirs() }
     private val frames = File(dir,"frames").apply{mkdirs()}
     private val log = File(dir,"timeline.jsonl")
-    @Synchronized fun event(type:String, data:Map<String,Any?> = emptyMap()) {
+    fun event(type:String, data:Map<String,Any?> = emptyMap()) = synchronized(AppStorageLock) {
         val o=JSONObject(); o.put("ts_ms",System.currentTimeMillis());o.put("mono_ms",SystemClock.elapsedRealtime());o.put("type",type)
         data.forEach{(k,v)->o.put(k, JSONObject.wrap(v))}
         log.appendText(o.toString()+"\n")
@@ -44,9 +46,14 @@ class MemoryStore(private val ctx: Context) {
     }
     fun exportZip():String {
         event("EXPORT_REQUESTED")
+        val timeline = synchronized(AppStorageLock) { if (log.exists()) log.readBytes() else ByteArray(0) }
         val tmp=File(ctx.cacheDir,"LiveSignalMemory_$sessionId.zip")
         ZipOutputStream(BufferedOutputStream(FileOutputStream(tmp))).use { z ->
-            fun add(f:File, base:String){ if(f.isDirectory) f.listFiles()?.forEach{add(it,if(base.isEmpty())it.name else "$base/${it.name}")} else {z.putNextEntry(ZipEntry(base));f.inputStream().use{it.copyTo(z)};z.closeEntry()} }
+            fun add(f:File, base:String){
+                if(f.isDirectory) f.listFiles()?.forEach{add(it,if(base.isEmpty())it.name else "$base/${it.name}")}
+                else if (f == log) { z.putNextEntry(ZipEntry(base)); z.write(timeline); z.closeEntry() }
+                else {z.putNextEntry(ZipEntry(base));f.inputStream().use{it.copyTo(z)};z.closeEntry()}
+            }
             dir.listFiles()?.forEach{add(it,it.name)}
             z.putNextEntry(ZipEntry("README.txt")); z.write("Live Signal Assistant 7.0 ONE DECISION + MEMORY\nTimeline timestamps are epoch milliseconds. SCREEN_EVIDENCE files map visual chart evidence to decisions.\n".toByteArray()); z.closeEntry()
         }

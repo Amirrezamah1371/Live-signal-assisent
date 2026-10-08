@@ -4,7 +4,7 @@ import sys, os, json, glob, zipfile, tempfile, collections
 import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 from decode_trace import decode
-from engine import register
+from engine import register_legacy as register
 src = sys.argv[1]
 if src.endswith('.zip'):
     d = tempfile.mkdtemp(); zipfile.ZipFile(src).extractall(d); src = d

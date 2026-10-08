@@ -1,6 +1,6 @@
 import math, numpy as np
 # ---------------- ChangeEngine (mirror of Kotlin ChangeEngine.kt) ----------------
-def register(old,new):
+def register_legacy(old,new):
     n0=len(old); S=max(3,n0//8); best=None
     for s in range(0,S+1):
         L=min(n0-s,len(new))-3
@@ -15,28 +15,69 @@ def register(old,new):
         sc=res+pen
         if best is None or sc<best[0]: best=(sc,s,a_c,b)
     return best
+def register(old,new,old_real=None,new_real=None):
+    """72.0.2 fit. Score gate stays 0.30. The live tip and the worst 15% of columns are not the fit."""
+    old=np.asarray(old,float); new=np.asarray(new,float)
+    n0=len(old); S=max(3,n0//8); tail=max(6,len(new)//10); need=max(24,int(0.40*min(n0,len(new))))
+    best=None
+    for s in range(0,S+1):
+        maxL=min(n0-s,len(new))-tail
+        if maxL<need: continue
+        idx=[i for i in range(maxL) if (old_real is None or old_real[s+i]) and (new_real is None or new_real[i])]
+        if len(idx)<need: continue
+        x=np.array([old[s+i] for i in idx]); y=np.array([new[i] for i in idx])
+        vx=x.var()
+        if vx<1e-9: continue
+        a=((x-x.mean())*(y-y.mean())).mean()/vx
+        a_c=min(2.8,max(0.35,a)); b=y.mean()-a_c*x.mean()
+        order=np.sort(np.abs(y-(a_c*x+b))); keep=max(1,int(len(order)*0.85))
+        rmse=math.sqrt(np.mean(order[:keep]**2)); res=rmse/(y.std()+1e-9)
+        pen=0.0 if abs(a-a_c)<1e-9 else 1.0
+        sc=res+pen
+        if best is None or sc<best[0]: best=(sc,s,a_c,b)
+    return best
 class ChangeEngine:
     def __init__(s): s.reset()
-    def reset(s): s.prev=None; s.A=1.0; s.B=0.0; s.series=[]; s.last_reg='NEW'
-    def update(s,t,p):
+    def reset(s):
+        s.prev=None; s.A=1.0; s.B=0.0; s.series=[]; s.last_reg='NEW'; s.fail=0; s.provisional=True; s.last_ok=-1.0
+    def _wipe(s):
+        s.series=[]; s.A=1.0; s.B=0.0; s.provisional=True; s.last_ok=-1.0
+    def update(s,t,p,real=None):
         p=np.asarray(p,float); reg='NEW'; sh=0; aa=1.0
-        if s.prev is not None and t-s.prev[0]<=3.5:
-            r=register(s.prev[1],p)
+        if s.prev is None:
+            s.prev=(t,p,real); s.provisional=True
+        elif t-s.prev[0]<=3.5 and t>s.prev[0]:
+            r=register(s.prev[1],p,s.prev[2],real)
             if r is not None and r[0]<0.30:
                 _,sh,a,b=r; aa=a; reg='OK'
                 s.B=s.B-s.A*b/a; s.A=s.A/a
+                s.prev=(t,p,real); s.fail=0; s.provisional=False; s.last_ok=t
             else:
-                reg='FAIL'; s.series=[]; s.A=1.0; s.B=0.0
-        elif s.prev is not None: reg='GAP'; s.series=[]; s.A=1.0; s.B=0.0
-        s.prev=(t,p); s.last_reg=reg
-        v=s.A*float(np.median(p[-3:]))+s.B
+                s.fail+=1; reg='FAIL'
+                if s.fail>=2:
+                    s._wipe(); s.prev=(t,p,real); s.fail=0
+                else:
+                    s.last_reg=reg
+                    return dict(reg=reg,shift=0,a=1.0,ref_v=s.series[-1][1] if s.series else 0.0)
+        else:
+            reg='GAP'; s._wipe(); s.prev=(t,p,real); s.fail=0
+        s.last_reg=reg
+        if real is None:
+            tail=p[-3:]
+        else:
+            picked=[p[i] for i in range(len(p)-1,-1,-1) if i < len(real) and real[i]]
+            tail=np.array(picked[:3] if picked else p[-3:])
+        v=s.A*float(np.median(tail))+s.B
         s.series.append((t,v)); s.series=[q for q in s.series if t-q[0]<=45.0]
         return dict(reg=reg,shift=sh,a=aa,ref_v=v)
     def grid(s,t_now,W=30):
+        if s.provisional or len(s.series)<8: return None
         ts=np.array([q[0] for q in s.series]); vs=np.array([q[1] for q in s.series])
-        if len(ts)<8 or t_now-ts[0]<12: return None
-        W=int(min(W,t_now-ts[0])); g=t_now-np.arange(W,-1,-1.0)
-        return np.interp(g,ts,vs)   # index W = now
+        if t_now-ts[-1]>2.5: return None
+        t_ref=min(t_now,ts[-1])
+        if t_ref-ts[0]<12: return None
+        W=int(min(W,t_ref-ts[0])); g=t_ref-np.arange(W,-1,-1.0)
+        return np.interp(g,ts,vs)
     def features(s,t_now,sb):
         g=s.grid(t_now)
         if g is None: return dict(valid=False)

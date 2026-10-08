@@ -13,6 +13,7 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import java.io.File
 import java.util.concurrent.Executors
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -30,6 +31,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private lateinit var statusView: TextView
+    private lateinit var pendingBox: LinearLayout
     private val importLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) exportWorker.execute {
             val msg = try {
@@ -48,7 +50,7 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36,60,36,36) }
         root.addView(TextView(this).apply {
-            text = "Live Signal Assistant 72.0.1\n\nDiagnostic logging build · Experience V3\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
+            text = "Live Signal Assistant 72.0.2\n\nForensic build · Experience V3\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
             textSize = 20f
         })
         root.addView(Button(this).apply {
@@ -95,6 +97,8 @@ class MainActivity : AppCompatActivity() {
         })
         statusView = TextView(this).apply { textSize = 13f; setPadding(0, 24, 0, 0) }
         root.addView(statusView)
+        pendingBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 12, 0, 0) }
+        root.addView(pendingBox)
         root.addView(TextView(this).apply {
             text="\nبعد از Export موفق و Verify شده می‌توانی حافظه داخلی تست را پاک کنی. ZIP ذخیره‌شده در Downloads حذف نمی‌شود.\n\nپاک‌سازی Session هرگز Experience Core را حذف نمی‌کند. Experience فقط از WIN/LOSS یاد می‌گیرد؛ VOID آموزش نمی‌دهد."
             textSize=15f
@@ -109,7 +113,45 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); refreshStatus() }
+    override fun onResume() { super.onResume(); refreshStatus(); refreshPending() }
+
+    private fun pendingStore() = PendingTradeStore(File(filesDir, "permanent_experience"))
+
+    private fun refreshPending() {
+        if (!::pendingBox.isInitialized) return
+        pendingBox.removeAllViews()
+        val items = pendingStore().all()
+        if (items.isEmpty()) return
+        pendingBox.addView(TextView(this).apply {
+            text = "Unlabeled executed signals (${items.size}). The first recorded WIN, LOSS, or VOID is kept."
+            textSize = 14f
+        })
+        for (p in items) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(TextView(this).apply {
+                text = "${p.direction} · ${p.state}\n"
+                textSize = 13f
+            })
+            for (label in listOf("WIN", "LOSS", "VOID")) {
+                row.addView(Button(this).apply {
+                    text = label
+                    textSize = 11f
+                    setOnClickListener { settlePending(p, label) }
+                })
+            }
+            pendingBox.addView(row)
+        }
+    }
+
+    private fun settlePending(p: PendingTradeStore.Pending, result: String) {
+        exportWorker.execute {
+            val store = ExperienceStore(applicationContext)
+            if (result == "WIN" || result == "LOSS") store.learn(p.direction, p.state, p.regime, p.band, result, p.signalId, p.fields)
+            else store.recordUntrained(p.signalId, result, p.direction, p.state, p.regime, p.band, p.fields)
+            pendingStore().remove(p.signalId)
+            runOnUiThread { refreshPending(); refreshStatus(); Toast.makeText(this, "$result recorded", Toast.LENGTH_SHORT).show() }
+        }
+    }
 
     private fun showPostExportDialog(result: MemoryExporter.ExportResult) {
         val mb=result.bytes/1024.0/1024.0

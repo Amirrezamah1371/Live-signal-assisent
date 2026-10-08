@@ -15,7 +15,8 @@ data class Obs(val tMs: Long, val r: SignalResult)
  *  - ChangeEngine supplies real recent-change features; a REGIME_CHANGE needs multi-window agreement,
  *    persistence, a deep retrace and time since the extreme (an isolated spike cannot flip the side),
  *  - entry quality and decision strength are separate; strength is NOT a probability,
- *  - Experience may only lower/raise strength or turn the signal into WAIT.
+ *  - Experience may only lower strength or turn the signal into WAIT. It does not raise strength.
+ *  - A direction is published only when the recent cross-frame series is valid and registration is trusted.
  */
 object CycleDecider {
     private val weakReasons = setOf("FILTER", "SAME_SETUP", "ANTI_FLIP", "CONFIRM", "DIRECTION_UNSTABLE", "LATE_ENTRY_RISK", "SHOCK_UNRESOLVED")
@@ -26,7 +27,7 @@ object CycleDecider {
 
     fun decide(
         list: List<Obs>, endMs: Long, ce: ChangeEngine, tNowSec: Double,
-        experience: ExperienceStore, staleMs: Long
+        experience: ExperienceSource, staleMs: Long
     ): SignalResult {
         val n = list.size
         fun tw(o: Obs): Double {
@@ -39,18 +40,20 @@ object CycleDecider {
         var lateW = 0.0; var sideW30 = 0.0
         for (o in list) {
             val r = o.r
-            if (r.reason == "LOW_VISIBILITY") { lowVis++; continue }
+            if (r.reason == "LOW_VISIBILITY" || r.reason == "NO_CURRENT_TIP") { lowVis++; continue }
             val dirObs = r.direction == "UP" || r.direction == "DOWN"
             val weak = !dirObs && r.side != 0 && r.reason in weakReasons
             if (!dirObs && !weak) continue
             val w = tw(o) * ef(r) * (if (dirObs) 1.0 else 0.30)
+            // Late-entry and unresolved-shock observations are refusals. They must not vote for a direction.
+            if (weak && r.reason in lateReasons) {
+                if (endMs - o.tMs <= 30000L) lateW += w
+                continue
+            }
             val sgn = if (dirObs) (if (r.direction == "UP") 1 else -1) else r.side
             if (sgn > 0) upW += w else dnW += w
             if (dirObs) dirN++ else weakN++
-            if (endMs - o.tMs <= 30000L) {
-                sideW30 += w
-                if (weak && r.reason in lateReasons) lateW += w
-            }
+            if (endMs - o.tMs <= 30000L) sideW30 += w
         }
         val total = upW + dnW
         val cons = if (total <= 0.0) 0.0 else max(upW, dnW) / total
@@ -59,7 +62,7 @@ object CycleDecider {
             dnW >= upW * 1.15 && dnW > 0.0 -> "DOWN"
             else -> "WAIT"
         }
-        val lateShare = if (sideW30 > 0.0) lateW / sideW30 else 0.0
+        val lateShare = if (sideW30 + lateW > 0.0) lateW / (sideW30 + lateW) else 0.0
         val last20 = list.filter { endMs - it.tMs <= 20000L }
         val extQ = if (last20.isEmpty()) 0.0 else last20.map { it.r.traceQuality }.average()
 
@@ -95,9 +98,11 @@ object CycleDecider {
         val recentSide = if (!feBase.valid) "WAIT" else if (zc > 0.15) "UP" else if (zc < -0.15) "DOWN" else "WAIT"
         if (baseSign == 0) {
             if (feBase.valid && abs(feBase.agreement) >= 0.999 && abs(feBase.z10) >= 1.0 && abs(feBase.z6) >= 0.8) {
-                val cand = if (zc > 0) 1 else -1
-                val f2 = ce.features(tNowSec, cand)
-                if (f2.valid && f2.state == "CONTINUING") { side = cand; recentLed = true }
+                val cand = if (zc > 0.15) 1 else if (zc < -0.15) -1 else 0
+                if (cand != 0) {
+                    val f2 = ce.features(tNowSec, cand)
+                    if (f2.valid && f2.state == "CONTINUING") { side = cand; recentLed = true }
+                }
             }
             if (side == 0) return wait("CYCLE_INCOHERENT", mapOf("final_recent_side" to recentSide))
         } else if (feBase.valid && feBase.state == "REGIME_CHANGE") {
@@ -149,7 +154,8 @@ object CycleDecider {
         val agree = if (fe.valid) fe.agreement else 0.0
         val cVote = if (corrected) clip01(agree * 0.5 + 0.5) else clip01((margin - 0.1) / 0.7)
         val cCons = if (corrected) 0.5 else clip01((cons - 0.5) / 0.5)
-        val cRecent = if (fe.valid) (agree + 1.0) / 2.0 else 0.5
+        // Missing recent evidence is absence, not a neutral 0.5 agreement.
+        val cRecent = if (fe.valid) (agree + 1.0) / 2.0 else 0.0
         val e = 0.26 * cVote + 0.18 * cCons + 0.22 * cRecent + 0.18 * (entryQ / 100.0) + 0.10 * extQ +
             0.06 * clip01(dirN / 20.0) - 0.20 * clip01(conflict / 100.0) - 0.15 * clip01(exhaustion) -
             (if (corrected) 0.10 else 0.0) - (if (fe.valid) 0.0 else 0.06)
@@ -159,6 +165,7 @@ object CycleDecider {
         val band = ExperienceStore.entryBand(entryQ)
         val adv = experience.advise(sideStr, state, regime, band)
         val strength = (strength0 + (if (adv.action == "AVOID") 0.0 else adv.strengthDelta)).coerceIn(0.0, 100.0)
+        val regTrusted = ce.registrationTrusted(tNowSec)
 
         val out = HashMap<String, Any?>(common)
         out["final_recent_side"] = recentSide
@@ -185,13 +192,10 @@ object CycleDecider {
         out["experience_level"] = adv.level; out["experience_key"] = adv.key
         out["experience_note"] = adv.note; out["experience_alt_posterior"] = adv.altPosterior
         out["experience_veto"] = adv.action == "AVOID"
+        out["reg_trusted"] = regTrusted
+        out["strength_is_probability"] = false
 
-        val reasonWait = when {
-            adv.action == "AVOID" -> "EXPERIENCE_AVOID"
-            entryQ < 32.0 -> "POOR_ENTRY"
-            strength < 22.0 -> "WEAK_EVIDENCE"
-            else -> ""
-        }
+        val reasonWait = DecisionGate.block(fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action)
         if (reasonWait.isNotEmpty())
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), reasonWait, diagnostics = out)
         val reason = if (corrected) "REGIME_CHANGE" else if (recentLed) "RECENT_LED" else topReason
@@ -199,5 +203,28 @@ object CycleDecider {
             sideStr, 60, -1, entryQ.toInt(), conflict.toInt(), reason,
             signalQuality = max(1, strength.toInt()), diagnostics = out
         )
+    }
+}
+
+/** Publish gate. Empty string means the directional result may be shown. */
+object DecisionGate {
+    fun block(
+        recentValid: Boolean,
+        regTrusted: Boolean,
+        state: String,
+        lateShare: Double,
+        entryQ: Double,
+        strength: Double,
+        experienceAction: String
+    ): String = when {
+        !recentValid -> "NO_RECENT_EVIDENCE"
+        !regTrusted -> "REGISTRATION_UNSTABLE"
+        state == "EXHAUSTION" -> "EXHAUSTION"
+        state == "NOISE" -> "NOISE"
+        lateShare >= 0.5 -> "LATE_WINDOW"
+        experienceAction == "AVOID" -> "EXPERIENCE_AVOID"
+        entryQ < 32.0 -> "POOR_ENTRY"
+        strength < 22.0 -> "WEAK_EVIDENCE"
+        else -> ""
     }
 }

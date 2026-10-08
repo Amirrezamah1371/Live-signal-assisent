@@ -4,57 +4,55 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.sqrt
 
 /**
  * Permanent Experience V3 — compact hierarchical Beta-Binomial statistics.
  *
- * What it stores: win/loss weights per context cell. The key space is FINITE
- * (action x state x regime x entry-band = 2x5x3x3), so the file can never grow beyond ~160 cells (~15 KB).
- * No screenshots, no raw observations.
+ * What it stores: win/loss weights per context cell. The key space is finite.
+ * Version stays 3 so an existing experience_v3.json still loads. Optional keys
+ * (applied_signal_ids, untrained_results) are ignored by older readers that only
+ * check version and cells.
  *
- * How it learns: only WIN/LOSS train it (VOID never). Existing cells of the same action decay slightly
- * (x0.995) before each update so old knowledge fades slowly, never instantly.
+ * How it learns: only WIN/LOSS train it, and only when the decision had a real
+ * recent-change state. NO_RECENT and VOID are written to the audit log and do not
+ * move the weights. Existing cells of the same action decay slightly (x0.995)
+ * before each trained update.
  *
- * How it is used: advise() returns a posterior for the cell that matches the current decision.
- * Each level is shrunk toward its parent (strength 10), so a handful of trades barely moves anything.
- * Experience can only (a) leave the decision untouched, (b) lower/raise decision STRENGTH, or
- * (c) turn a signal into WAIT when the cell has >= 10 effective trades and its 80% upper bound is below 50%.
- * It never flips UP<->DOWN.
+ * How it is used: advise() can leave a decision alone, lower STRENGTH, or turn it
+ * into WAIT. It does not raise STRENGTH and it never flips UP to DOWN.
  */
-class ExperienceStore(private val ctx: Context) {
+class ExperienceStore(private val ctx: Context) : ExperienceSource {
     data class Advice(
-        val action: String,          // NONE | BOOST | DAMP | AVOID
+        val action: String,          // NONE | DAMP | AVOID
         val strengthDelta: Double,
-        val nEff: Double,            // effective trades in the matched cell
-        val posterior: Double,       // shrunk win-rate estimate of the matched cell
+        val nEff: Double,
+        val posterior: Double,
         val lb80: Double, val ub80: Double,
-        val level: Int,              // 0..3 deepest level with data
+        val level: Int,
         val key: String,
         val note: String,
-        val altPosterior: Double     // same estimate for the opposite direction (logging only)
+        val altPosterior: Double
     )
 
     private val dir = File(ctx.filesDir, "permanent_experience")
     private val file = File(dir, "experience_v3.json")
     private val bak = File(dir, "experience_v3.bak")
-    private val lock = Any()
+    private val audit = File(dir, "experience_audit.jsonl")
     private val priorStrength = 10.0
     private val decayPerTrade = 0.995
-    private val minEffForEffect = 10.0
     @Volatile var loadNote: String = "OK"
         private set
 
     companion object {
+        private val fileLock = Any()
         val STATES = listOf("CONTINUING", "PULLBACK", "EXHAUSTION", "REGIME_CHANGE", "NOISE", "NO_RECENT")
         fun entryBand(entryQ: Double) = if (entryQ < 50.0) "E_LOW" else if (entryQ < 70.0) "E_MID" else "E_HIGH"
         fun regimeBand(trend: Double) = if (trend >= 0.6) "TREND" else if (trend <= 0.3) "RANGE" else "MIXED"
     }
 
     private fun fresh(): JSONObject = JSONObject().put("version", 3).put("total_results", 0)
-        .put("cells", JSONArray()).put("recent", "")
+        .put("untrained_results", 0).put("cells", JSONArray()).put("recent", "")
+        .put("applied_signal_ids", JSONArray())
 
     private fun parse(f: File): JSONObject? = try {
         val o = JSONObject(f.readText())
@@ -66,7 +64,6 @@ class ExperienceStore(private val ctx: Context) {
         if (!file.exists() && !bak.exists()) { loadNote = "NEW"; return fresh() }
         parse(file)?.let { loadNote = "OK"; return it }
         parse(bak)?.let { loadNote = "RESTORED_FROM_BACKUP"; return it }
-        // Never overwrite an unreadable store silently: keep it for inspection.
         try { if (file.exists()) file.renameTo(File(dir, "experience_v3.corrupt-" + System.currentTimeMillis())) } catch (_: Throwable) {}
         loadNote = "CORRUPT_STARTED_FRESH"
         return fresh()
@@ -90,69 +87,65 @@ class ExperienceStore(private val ctx: Context) {
         return m
     }
 
-    private fun levelKeys(action: String, state: String, regime: String, band: String) = listOf(
-        action, "$action|$state", "$action|$state|$regime", "$action|$state|$regime|$band"
-    )
-
-    private fun chain(m: Map<String, DoubleArray>, keys: List<String>): Triple<Double, Double, Int> {
-        // Hierarchical shrinkage WITHOUT double counting: each level's prior is the parent's rate
-        // computed from the parent's data EXCLUDING the child's own trades.
-        val c = Array(4) { m[keys[it]] ?: doubleArrayOf(0.0, 0.0) }
-        val w0 = (c[0][0] - c[1][0]).coerceAtLeast(0.0)
-        val l0 = (c[0][1] - c[1][1]).coerceAtLeast(0.0)
-        var prior = (w0 + priorStrength) / (w0 + l0 + 2.0 * priorStrength)
-        var alpha = priorStrength * prior
-        var beta = priorStrength * (1.0 - prior)
-        var deepest = if (c[0][0] + c[0][1] > 0) 0 else -1
-        for (lv in 1..3) {
-            val own = c[lv]
-            alpha = own[0] + priorStrength * prior
-            beta = own[1] + priorStrength * (1.0 - prior)
-            if (own[0] + own[1] > 0) deepest = lv
-            if (lv < 3) {
-                val child = c[lv + 1]
-                val rw = (own[0] - child[0]).coerceAtLeast(0.0)
-                val rl = (own[1] - child[1]).coerceAtLeast(0.0)
-                prior = (rw + priorStrength * prior) / (rw + rl + priorStrength)
-            }
-        }
-        return Triple(alpha, beta, deepest)
+    private fun appliedIds(o: JSONObject): MutableList<String> {
+        val out = ArrayList<String>()
+        val a = o.optJSONArray("applied_signal_ids") ?: return out
+        for (i in 0 until a.length()) out.add(a.optString(i))
+        return out
     }
 
-    fun advise(action: String, state: String, regime: String, band: String): Advice = synchronized(lock) {
-        if (action != "UP" && action != "DOWN")
-            return@synchronized Advice("NONE", 0.0, 0.0, 0.5, 0.0, 1.0, -1, "", "NO_SIDE", 0.5)
-        val m = cellMap(load())
-        val keys = levelKeys(action, state, regime, band)
-        val (alpha, beta, deepest) = chain(m, keys)
-        val cell = m[keys[3]] ?: doubleArrayOf(0.0, 0.0)
-        val nEff = cell[0] + cell[1]
-        val p = alpha / (alpha + beta)
-        val sd = sqrt(p * (1.0 - p) / (alpha + beta + 1.0))
-        val lb = p - 1.2816 * sd; val ub = p + 1.2816 * sd
-        val other = if (action == "UP") "DOWN" else "UP"
-        val (a2, b2, _) = chain(m, levelKeys(other, state, regime, band))
-        val alt = a2 / (a2 + b2)
-        val key = keys[3]
-        if (nEff < minEffForEffect)
-            return@synchronized Advice("NONE", 0.0, nEff, p, lb, ub, deepest, key, "SMALL_SAMPLE", alt)
-        if (ub < 0.50)
-            return@synchronized Advice("AVOID", -100.0, nEff, p, lb, ub, deepest, key, "UPPER80_BELOW_50", alt)
-        if (ub < 0.55 && nEff >= 20.0)
-            return@synchronized Advice("DAMP", -((0.55 - p) * 100.0).coerceIn(3.0, 15.0), nEff, p, lb, ub, deepest, key, "UPPER80_BELOW_55", alt)
-        if (lb > 0.55)
-            return@synchronized Advice("BOOST", min(8.0, (p - 0.55) * 80.0).coerceAtLeast(1.0), nEff, p, lb, ub, deepest, key, "LOWER80_ABOVE_55", alt)
-        Advice("NONE", 0.0, nEff, p, lb, ub, deepest, key, "NEUTRAL", alt)
+    /** @return true if this signal was already recorded */
+    private fun markApplied(o: JSONObject, signalId: String): Boolean {
+        if (signalId.isEmpty()) return false
+        val ids = appliedIds(o)
+        if (ExperienceMath.alreadyApplied(ids, signalId)) return true
+        ids.add(signalId)
+        while (ids.size > 500) ids.removeAt(0)
+        val arr = JSONArray()
+        for (id in ids) arr.put(id)
+        o.put("applied_signal_ids", arr)
+        return false
     }
 
-    /** Only WIN/LOSS train. Returns (lifetime results, number of cells). */
-    fun learn(action: String, state: String, regime: String, band: String, result: String): Pair<Int, Int> = synchronized(lock) {
-        if ((action != "UP" && action != "DOWN") || (result != "WIN" && result != "LOSS")) return@synchronized stats()
+    private fun writeAudit(
+        signalId: String, action: String, state: String, regime: String, band: String,
+        result: String, trained: Boolean, extra: Map<String, String>
+    ) {
+        dir.mkdirs()
+        val line = ExperienceMath.auditJson(
+            System.currentTimeMillis(), signalId, action, state, regime, band, result, trained, extra
+        )
+        audit.appendText(line + "\n")
+    }
+
+    override fun advise(action: String, state: String, regime: String, band: String): Advice = synchronized(fileLock) {
+        ExperienceMath.advise(cellMap(load()), action, state, regime, band)
+    }
+
+    /**
+     * WIN/LOSS entry point. NO_RECENT outcomes are audited and not trained.
+     * A repeated signalId is ignored so a recovered button cannot double-count.
+     */
+    fun learn(
+        action: String, state: String, regime: String, band: String, result: String,
+        signalId: String = "", extra: Map<String, String> = emptyMap()
+    ): Pair<Int, Int> = synchronized(fileLock) {
+        if ((action != "UP" && action != "DOWN") || (result != "WIN" && result != "LOSS")) return@synchronized statsLocked()
         val o = load()
+        if (markApplied(o, signalId)) {
+            save(o)
+            return@synchronized statsLocked()
+        }
+        val train = ExperienceMath.trainsWeights(state)
+        writeAudit(signalId, action, state, regime, band, result, train, extra)
+        if (!train) {
+            o.put("untrained_results", o.optInt("untrained_results", 0) + 1)
+            save(o)
+            return@synchronized statsLocked()
+        }
         val m = cellMap(o)
-        // slow forgetting for this action only
         for ((k, v) in m) if (k == action || k.startsWith("$action|")) { v[0] *= decayPerTrade; v[1] *= decayPerTrade }
-        for (k in levelKeys(action, state, regime, band)) {
+        for (k in ExperienceMath.levelKeys(action, state, regime, band)) {
             val c = m.getOrPut(k) { doubleArrayOf(0.0, 0.0) }
             if (result == "WIN") c[0] += 1.0 else c[1] += 1.0
         }
@@ -165,16 +158,30 @@ class ExperienceStore(private val ctx: Context) {
         val rec = (o.optString("recent", "") + (if (result == "WIN") "W" else "L")).takeLast(40)
         o.put("recent", rec)
         save(o)
-        stats()
+        statsLocked()
     }
 
-    fun stats(): Pair<Int, Int> {
+    /** VOID and any other labeled outcome that must not train. Still idempotent per signalId. */
+    fun recordUntrained(
+        signalId: String, result: String, action: String, state: String, regime: String, band: String,
+        extra: Map<String, String> = emptyMap()
+    ) = synchronized(fileLock) {
+        val o = load()
+        if (markApplied(o, signalId)) { save(o); return@synchronized }
+        writeAudit(signalId, action, state, regime, band, result, false, extra)
+        o.put("untrained_results", o.optInt("untrained_results", 0) + 1)
+        save(o)
+    }
+
+    fun stats(): Pair<Int, Int> = synchronized(fileLock) { statsLocked() }
+
+    private fun statsLocked(): Pair<Int, Int> {
         val o = load()
         return o.optInt("total_results", 0) to (o.optJSONArray("cells")?.length() ?: 0)
     }
 
-    /** lifetime win rate vs the last (up to) 40 results — drift monitor. null if no data. */
-    fun driftSummary(): String = synchronized(lock) {
+    /** lifetime weighted win rate vs the last (up to) 40 trained results. */
+    fun driftSummary(): String = synchronized(fileLock) {
         val o = load()
         val cells = cellMap(o)
         val tw = (cells["UP"]?.get(0) ?: 0.0) + (cells["DOWN"]?.get(0) ?: 0.0)
@@ -183,20 +190,34 @@ class ExperienceStore(private val ctx: Context) {
         val rw = rec.count { it == 'W' }
         val life = if (tw + tl > 0) "%.0f%%".format(100.0 * tw / (tw + tl)) else "--"
         val last = if (rec.isNotEmpty()) "%d/%d".format(rw, rec.length) else "--"
-        "lifetime ${o.optInt("total_results", 0)} trades · weighted WR $life · last ${rec.length}: $last wins · store: $loadNote"
+        val untrained = o.optInt("untrained_results", 0)
+        "lifetime ${o.optInt("total_results", 0)} trained · $untrained untrained · weighted WR $life · last ${rec.length}: $last wins · store: $loadNote"
     }
 
-    fun snapshotFile(): File? = synchronized(lock) { if (file.exists()) file else null }
+    fun snapshotFile(): File? = synchronized(fileLock) { if (file.exists()) file else null }
 
-    fun exportText(): String = synchronized(lock) { load().toString(1) }
+    /** Raw bytes, so an export does not parse or repair the live file. */
+    fun snapshotBytes(): ByteArray? = synchronized(fileLock) { if (file.exists()) file.readBytes() else null }
+
+    fun auditSnapshot(): ByteArray? = synchronized(fileLock) { if (audit.exists()) audit.readBytes() else null }
+
+    fun exportText(): String = synchronized(fileLock) { load().toString(1) }
 
     /** Import a backup. Replaces the current store only if the backup has at least as many lifetime results. */
-    fun importText(text: String): String = synchronized(lock) {
+    fun importText(text: String): String = synchronized(fileLock) {
         val inc = try { JSONObject(text) } catch (_: Throwable) { return@synchronized "Import rejected: not valid JSON" }
         if (inc.optInt("version", 0) != 3 || inc.optJSONArray("cells") == null) return@synchronized "Import rejected: not an Experience V3 file"
         val cur = load()
         if (inc.optInt("total_results", 0) < cur.optInt("total_results", 0))
             return@synchronized "Import rejected: backup has fewer results (${inc.optInt("total_results", 0)}) than current (${cur.optInt("total_results", 0)})"
+        val union = LinkedHashSet<String>()
+        fun collect(a: JSONArray?) { if (a == null) return; for (i in 0 until a.length()) union.add(a.optString(i)) }
+        collect(cur.optJSONArray("applied_signal_ids"))
+        collect(inc.optJSONArray("applied_signal_ids"))
+        val arr = JSONArray()
+        for (id in union) if (id.isNotEmpty()) arr.put(id)
+        inc.put("applied_signal_ids", arr)
+        if (!inc.has("untrained_results")) inc.put("untrained_results", cur.optInt("untrained_results", 0))
         save(inc)
         "Experience restored: ${inc.optInt("total_results", 0)} results"
     }

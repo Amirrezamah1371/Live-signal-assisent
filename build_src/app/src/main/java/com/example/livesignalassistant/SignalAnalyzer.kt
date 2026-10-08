@@ -29,6 +29,7 @@ object SignalAnalyzer {
     @Synchronized fun analyze(b:Bitmap,tr:TraceResult?,velocityPx:Double,accelPx:Double):SignalResult{
         val w=b.width; val h=b.height
         if(w<240||h<360||tr==null) return wait("LOW_VISIBILITY")
+        if(tr.tipGapFrac>0.25) return wait("NO_CURRENT_TIP")
         val tq=tr.quality
         // The ROI, colour test, blob/line removal and continuity selection now live in TraceExtractor.
         val raw=ArrayList<Double>(tr.ys.size); for(yv in tr.ys)raw+=-yv
@@ -49,7 +50,7 @@ object SignalAnalyzer {
             "mode" to "1M_ONLY","expiry_ms" to 60000,"vision_coverage" to coverage,"trace_points" to raw.size,
             "sampled_columns" to raw.size,"one_minute_delta" to delta,"velocity" to velocity,"acceleration" to accel,
             "trace_q" to tq,"trace_real_frac" to tr.realFrac,"trace_ambiguity" to tr.ambiguity,"trace_max_jump" to tr.maxJumpFrac,
-            "trace_bar" to tr.barFound,"trace_roi_bottom" to tr.roiBottom
+            "trace_bar" to tr.barFound,"trace_roi_bottom" to tr.roiBottom,"trace_tip_gap" to tr.tipGapFrac
         ) + best.diagnostics
 
         // Do not chase a mature impulse. Sudden motion is evidence to re-evaluate, not a command to enter.

@@ -21,7 +21,8 @@ class Exp:
         if n<10: return 'NONE',0.0,n,p
         if ub<0.5: return 'AVOID',-100,n,p
         if ub<0.55 and n>=20: return 'DAMP',-min(15,max(3,(0.55-p)*100)),n,p
-        if lb>0.55: return 'BOOST',max(1,min(8,(p-0.55)*80)),n,p
+        # BOOST used to add this posterior onto STR. It is not a calibrated probability.
+        if lb>0.55: return 'NONE',0.0,n,p
         return 'NONE',0.0,n,p
     def learn(s,a,st,rg,bd,res):
         for k,v in s.m.items():
@@ -38,16 +39,18 @@ def decide(obs,endMs,ce,tnow,exp,stale=0,use_recent=True):
         if o['reason']=='LOW_VISIBILITY': continue
         d=o['dir'] in('UP','DOWN'); weak=(not d) and o['side']!=0 and o['reason'] in WEAK
         if not d and not weak: continue
-        w=tw(o)*ef(o)*(1.0 if d else 0.3); sg=(1 if o['dir']=='UP' else -1) if d else o['side']
+        w=tw(o)*ef(o)*(1.0 if d else 0.3)
+        if weak and o['reason'] in LATE:
+            if endMs-o['t']<=30000: lateW+=w
+            continue
+        sg=(1 if o['dir']=='UP' else -1) if d else o['side']
         if sg>0: up+=w
         else: dn+=w
         dirN+=d; weakN+=weak
-        if endMs-o['t']<=30000:
-            sw30+=w
-            if weak and o['reason'] in LATE: lateW+=w
+        if endMs-o['t']<=30000: sw30+=w
     tot=up+dn; cons=max(up,dn)/tot if tot>0 else 0
     base='UP' if up>=dn*1.15 and up>0 else ('DOWN' if dn>=up*1.15 and dn>0 else 'WAIT')
-    late=lateW/sw30 if sw30>0 else 0
+    late=lateW/(sw30+lateW) if (sw30+lateW)>0 else 0
     last20=[o for o in obs if endMs-o['t']<=20000]; extQ=np.mean([o['q'] for o in last20]) if last20 else 0
     info=dict(base=base,dirN=dirN,cons=cons)
     if stale>4000: return 'WAIT','STALE',0,info
@@ -85,12 +88,16 @@ def decide(obs,endMs,ce,tnow,exp,stale=0,use_recent=True):
     sideW=up if side>0 else dn; oth=dn if side>0 else up; margin=(sideW-oth)/tot if tot>0 else 0
     agree=fe['agree'] if fe['valid'] else 0.0
     cl=lambda v:min(1,max(0,v))
-    cV=cl(agree*0.5+0.5) if corr else cl((margin-0.1)/0.7); cC=0.5 if corr else cl((cons-0.5)/0.5); cR=(agree+1)/2 if fe['valid'] else 0.5
+    cV=cl(agree*0.5+0.5) if corr else cl((margin-0.1)/0.7); cC=0.5 if corr else cl((cons-0.5)/0.5); cR=(agree+1)/2 if fe['valid'] else 0.0
     e=0.26*cV+0.18*cC+0.22*cR+0.18*eq/100+0.10*extQ+0.06*cl(dirN/20)-0.20*cl(conf/100)-0.15*cl(exh)-(0.10 if corr else 0)-(0 if fe['valid'] else 0.06)
     s0=100*sig(7*(e-0.42))
     bd=band(eq); act,delta,nEff,post=exp.advise(sstr,state,rg,bd)
     st=min(100,max(0,s0+(0 if act=='AVOID' else delta)))
     info.update(state=state,corr=corr,rled=rled,eq=eq,s0=s0,act=act,ctx=(sstr,state,rg,bd),late=late,pen=pen,extQ=extQ)
+    if not fe.get('valid'): return 'WAIT','NO_RECENT_EVIDENCE',st,info
+    if state=='EXHAUSTION': return 'WAIT','EXHAUSTION',st,info
+    if state=='NOISE': return 'WAIT','NOISE',st,info
+    if late>=0.5: return 'WAIT','LATE_WINDOW',st,info
     if act=='AVOID': return 'WAIT','EXPERIENCE_AVOID',st,info
     if eq<32: return 'WAIT','POOR_ENTRY',st,info
     if st<22: return 'WAIT','WEAK_EVIDENCE',st,info

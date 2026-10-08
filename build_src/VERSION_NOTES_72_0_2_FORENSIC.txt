@@ -1,0 +1,33 @@
+Live Signal Assistant 72.0.2 FORENSIC (versionCode 49)
+
+Evidence: Experience V3 export LiveSignalExperience_20261008_201225_4103.json
+(70 trained results, 19 cells, recent 40 = 23W/17L). 95.9% of decayed weight is NO_RECENT.
+The diagnostic memory ZIP was not in the review environment. The in-repo replay CSV is an
+older prototype replay, not that missing log. The 72.0.1 zip is unchanged.
+
+Fixes, each tied to code plus that evidence:
+
+1. CycleDecider publishes UP/DOWN only when cross-frame features are valid and registration
+   is trusted. Missing recent evidence is WAIT / NO_RECENT_EVIDENCE. STR is not shown for that WAIT.
+   Missing recent agreement is scored as 0, not as a neutral 0.5.
+2. EXHAUSTION and NOISE are WAIT. Late-entry and shock refusals no longer vote for a direction.
+   If they are at least half of recent side-weight, the cycle is WAIT / LATE_WINDOW.
+3. ChangeEngine no longer wipes the series on one failed alignment, and it does not adopt that
+   frame as the new origin. A second consecutive failure, or a gap over 3.5s, restarts it as provisional.
+   The fit ignores the live tip and the worst 15% of column residuals. Acceptance remains score < 0.30.
+   Features are invalid when the newest point is older than 2.5s. Time past the last point is not
+   painted as a flat price.
+4. TraceExtractor keeps a fixed column width (length flicker was breaking alignment), reports tipGapFrac,
+   and deletes full-width horizontal rows only when another structure still holds 30% of the mask.
+   A trace whose right quarter was not seen is NO_CURRENT_TIP and is not fed to ChangeEngine.
+5. SignalAnalyzer vote memory is cleared at each cycle boundary.
+6. Experience advise no longer BOOSTS strength from an uncalibrated posterior. DAMP and AVOID remain.
+   NO_RECENT outcomes are audited and do not move the Beta weights. Historical cells are not rewritten.
+   applied_signal_ids makes a repeated WIN/LOSS a no-op. Version stays 3.
+7. An executed signal is written to pending_trades.tsv when the user locks it. MainActivity can record
+   WIN/LOSS/VOID after process death. VOID is audited. Session clear still does not delete Experience.
+8. Experience file access uses one lock across store instances. Timeline export copies the log under
+   that same lock so a concurrent append cannot tear the exported line.
+
+applicationId and the debug keystore are unchanged, so an update keeps the existing Experience file.
+STRENGTH is still not a win probability. This build does not claim a win rate.

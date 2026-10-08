@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.livesignalassistant.recency71727expv2r3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 48
-        versionName = "72.0.1-DIAG-LOGGING"
+        versionCode = 49
+        versionName = "72.0.2-FORENSIC"
     }
 
     signingConfigs {
@@ -44,4 +44,5 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.10.0")
+    testImplementation("junit:junit:4.13.2")
 }

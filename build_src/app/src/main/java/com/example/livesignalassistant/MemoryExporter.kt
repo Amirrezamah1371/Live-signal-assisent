@@ -27,10 +27,25 @@ object MemoryExporter {
         val tmp = File(context.cacheDir, "LiveSignalMemory_$stamp.zip")
         if (tmp.exists()) tmp.delete()
 
+        val timelines = synchronized(AppStorageLock) {
+            sessionDirs.mapNotNull { dir ->
+                val log = File(dir, "timeline.jsonl")
+                if (log.exists()) "sessions/${dir.name}/timeline.jsonl" to log.readBytes() else null
+            }.toMap()
+        }
+        val store = ExperienceStore(context)
+        val experienceBytes = store.snapshotBytes()
+        val auditBytes = store.auditSnapshot()
+        val pendingBytes = PendingTradeStore(File(context.filesDir, "permanent_experience")).snapshotBytes()
         ZipOutputStream(BufferedOutputStream(FileOutputStream(tmp), 256 * 1024)).use { zip ->
             fun add(file: File, path: String) {
                 if (file.isDirectory) {
                     file.listFiles()?.sortedBy { it.name }?.forEach { add(it, "$path/${it.name}") }
+                } else if (file.name == "timeline.jsonl") {
+                    val snap = timelines[path]
+                    zip.putNextEntry(ZipEntry(path))
+                    if (snap != null) zip.write(snap) else file.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
                 } else {
                     zip.putNextEntry(ZipEntry(path))
                     file.inputStream().buffered(256 * 1024).use { it.copyTo(zip, 256 * 1024) }
@@ -39,9 +54,23 @@ object MemoryExporter {
             }
             sessionDirs.forEach { add(it, "sessions/${it.name}") }
             // Snapshot permanent learning for audit/backup. Export does NOT move or delete the live Experience Core.
-            ExperienceStore(context).snapshotFile()?.let { add(it, "experience_snapshot/experience_v3.json") }
+            if (experienceBytes != null) {
+                zip.putNextEntry(ZipEntry("experience_snapshot/experience_v3.json"))
+                zip.write(experienceBytes)
+                zip.closeEntry()
+            }
+            if (auditBytes != null) {
+                zip.putNextEntry(ZipEntry("experience_snapshot/experience_audit.jsonl"))
+                zip.write(auditBytes)
+                zip.closeEntry()
+            }
+            if (pendingBytes != null) {
+                zip.putNextEntry(ZipEntry("experience_snapshot/pending_trades.tsv"))
+                zip.write(pendingBytes)
+                zip.closeEntry()
+            }
             zip.putNextEntry(ZipEntry("README.txt"))
-            zip.write("Live Signal Assistant 72.0 TRACE-FIX memory export. STRENGTH is an evidence-quality measure and is NOT a calibrated win probability. Session memory is deleted only after explicit user confirmation. Permanent Experience Core is NEVER cleared by session cleanup.\n".toByteArray())
+            zip.write("Live Signal Assistant 72.0.2 memory export. STRENGTH is an evidence-quality measure and is NOT a calibrated win probability. Session memory is deleted only after explicit user confirmation. Permanent Experience Core is NEVER cleared by session cleanup.\n".toByteArray())
             zip.closeEntry()
         }
 
