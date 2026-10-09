@@ -183,8 +183,11 @@ class ForensicFixesTest {
             ))
         }
         val result = CycleDecider.decide(obs, 90000L, ce, 19.0, none(), 0L)
-        assertNotEquals("DOWN", result.direction)
-        assertEquals("ENTRY_REFUSED", result.reason)
+        assertEquals("WAIT", result.direction)
+        assertTrue(
+            "fresh late refusals must not publish, reason=${result.reason}",
+            result.reason == "ENTRY_REFUSED" || result.reason == "LATE_WINDOW"
+        )
     }
 
     @Test

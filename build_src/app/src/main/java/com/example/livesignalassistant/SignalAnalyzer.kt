@@ -32,6 +32,7 @@ object SignalAnalyzer {
     /** Width and height are the captured frame. Replay uses this directly so the same gates run without a bitmap. */
     @Synchronized fun analyze(w:Int,h:Int,tr:TraceResult?,velocityPx:Double,accelPx:Double):SignalResult{
         if(w<240||h<360||tr==null) return wait("LOW_VISIBILITY")
+        if(!tr.tipConnected) return wait("TIP_AMBIGUOUS")
         if(tr.tipGapFrac>0.25) return wait("NO_CURRENT_TIP")
         val tq=tr.quality
         // Crop at the last real column. The fixed-width trace pads past the tip, and that flat
@@ -56,7 +57,8 @@ object SignalAnalyzer {
             "mode" to "1M_ONLY","expiry_ms" to 60000,"vision_coverage" to coverage,"trace_points" to raw.size,
             "sampled_columns" to raw.size,"one_minute_delta" to delta,"velocity" to velocity,"acceleration" to accel,
             "trace_q" to tq,"trace_real_frac" to tr.realFrac,"trace_ambiguity" to tr.ambiguity,"trace_max_jump" to tr.maxJumpFrac,
-            "trace_bar" to tr.barFound,"trace_roi_bottom" to tr.roiBottom,"trace_tip_gap" to tr.tipGapFrac
+            "trace_bar" to tr.barFound,"trace_roi_bottom" to tr.roiBottom,"trace_tip_gap" to tr.tipGapFrac,
+            "trace_tip_connected" to tr.tipConnected
         ) + best.diagnostics
 
         // Do not chase a mature impulse. Sudden motion is evidence to re-evaluate, not a command to enter.
@@ -67,9 +69,9 @@ object SignalAnalyzer {
         // A structural label can still be direction evidence, but it does not waive entry safety.
         // High exhaustion or an unresolved shock becomes a refusal even when the reason is BRK/TURN/REV.
         if(best.reason=="EXH" || (exhaustion>=.62 && continuation>=.34))
-            return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"LATE_ENTRY_RISK",up,down,0,diag,side=sign,traceQuality=tq)
+            return entryRefused("LATE_ENTRY_RISK", sign, best, up, down, diag, tq)
         if(volExpansion>=2.20 && best.conflict>35)
-            return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"SHOCK_UNRESOLVED",up,down,0,diag,side=sign,traceQuality=tq)
+            return entryRefused("SHOCK_UNRESOLVED", sign, best, up, down, diag, tq)
 
         // Balanced gates: selective without turning the robot into permanent WAIT.
         // These are model scores, never advertised as win probabilities.
@@ -100,7 +102,14 @@ object SignalAnalyzer {
             return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"SAME_SETUP",up,down,0,diag,side=sign,traceQuality=tq)
 
         lastSetupKey=setupKey;lastSignalAt=now;lastSignalSign=sign;lastSignalExpiry=60;lastSignalScore=best.score;lastSignalEntry=best.entry
-        return SignalResult(if(sign>0)"UP" else "DOWN",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),best.reason,up,down,best.score.toInt(),diag+mapOf("margin" to margin),side=sign,traceQuality=tq)
+        val measured=if(sign>0)"UP" else "DOWN"
+        return SignalResult(measured,60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),best.reason,up,down,best.score.toInt(),diag+mapOf("margin" to margin,"measured_direction" to measured,"entry_permission" to "OPEN"),side=sign,traceQuality=tq)
+    }
+
+    /** Direction stays on the result. Entry permission is what refuses the trade. */
+    private fun entryRefused(reason:String, sign:Int, best:C, up:Int, down:Int, diag:Map<String,Any?>, tq:Double):SignalResult{
+        val measured=if(sign>0)"UP" else "DOWN"
+        return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),reason,up,down,0,diag+mapOf("measured_direction" to measured,"entry_permission" to "REFUSED","measured_state" to best.reason),side=sign,traceQuality=tq)
     }
 
     private fun mk(p:List<Double>,h:Int):View{val d=p.zipWithNext{a,c->abs(c-a)};return View(p,max(h*.0017,median(d).coerceAtLeast(1.0)*.90))}

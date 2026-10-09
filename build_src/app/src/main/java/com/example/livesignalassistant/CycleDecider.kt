@@ -41,17 +41,21 @@ object CycleDecider {
         var refuseW = 0.0; var directW = 0.0
         for (o in list) {
             val r = o.r
-            if (r.reason == "LOW_VISIBILITY" || r.reason == "NO_CURRENT_TIP") { lowVis++; continue }
+            if (r.reason == "LOW_VISIBILITY" || r.reason == "NO_CURRENT_TIP" || r.reason == "TIP_AMBIGUOUS") { lowVis++; continue }
             val dirObs = r.direction == "UP" || r.direction == "DOWN"
             val weak = !dirObs && r.side != 0 && r.reason in weakReasons
             if (!dirObs && !weak) continue
             val w = tw(o) * ef(r) * (if (dirObs) 1.0 else 0.30)
             // Late-entry and unresolved-shock observations are refusals. They must not vote for a direction.
-            // Their full weight is kept so a few structural votes cannot outvote an explicit "do not enter".
+            // A current refusal can still block entry. Refusals older than the fresh window cannot.
             if (weak && r.reason in lateReasons) {
-                val refusal = tw(o) * ef(r)
-                refuseW += refusal
-                if (endMs - o.tMs <= 30000L) lateW += w
+                // Only the fresh window can refuse. Older late-entry mass must not erase a direction
+                // that the current evidence now supports. 20s is the same horizon registration trust uses.
+                if (endMs - o.tMs <= 20000L) {
+                    val refusal = tw(o) * ef(r)
+                    refuseW += refusal
+                    lateW += w
+                }
                 continue
             }
             val sgn = if (dirObs) (if (r.direction == "UP") 1 else -1) else r.side
