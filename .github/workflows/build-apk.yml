@@ -27,11 +27,13 @@ jobs:
 
       - name: Build APK
         working-directory: build_src
-        run: gradle --no-daemon assembleDebug --stacktrace
+        run: gradle --no-daemon assembleT60m1Debug assembleT60m5Debug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: LiveSignalAssistant-72.0.2-FORENSIC
-          path: build_src/app/build/outputs/apk/debug/app-debug.apk
+          name: LiveSignalAssistant-72.1.0-T60
+          path: |
+            build_src/app/build/outputs/apk/t60m1/debug/*.apk
+            build_src/app/build/outputs/apk/t60m5/debug/*.apk
           if-no-files-found: error
