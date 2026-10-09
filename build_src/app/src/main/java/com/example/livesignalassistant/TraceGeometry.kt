@@ -51,11 +51,98 @@ object TraceGeometry {
         }
     }
 
+    /**
+     * The adopted tip has to belong to the dominant connected price path.
+     *
+     * A short missed patch is still that path, including a steep move. A later piece is kept when
+     * it sits on the same vertical neighborhood as the path it would extend. A long right-edge
+     * island that is only a small piece of the trace is removed. Two large pieces that do not
+     * reconnect are left untouched and reported as not confident, so the caller does not invent a tip.
+     *
+     * Returns true when the surviving right edge is a confident price tip. `real` is cleared only
+     * for a piece that is clearly not that tip.
+     */
+    fun adoptConnectedTip(path: DoubleArray, real: BooleanArray): Boolean {
+        if (path.size != real.size || path.isEmpty()) return false
+        if (real.none { it }) return false
+        for (i in path.indices) if (real[i] && !path[i].isFinite()) return false
+        stripDetached(real)
+        if (real.none { it }) return false
+        var guard = 0
+        while (guard++ < 4) {
+            when (val edge = rightEdge(path, real)) {
+                is RightEdge.Connected -> return true
+                is RightEdge.Island -> for (i in edge.from..edge.to) real[i] = false
+                is RightEdge.Ambiguous -> return false
+            }
+        }
+        return real.any { it }
+    }
+
+    private sealed class RightEdge {
+        data object Connected : RightEdge()
+        data object Ambiguous : RightEdge()
+        class Island(val from: Int, val to: Int) : RightEdge()
+    }
+
+    private fun rightEdge(path: DoubleArray, real: BooleanArray): RightEdge {
+        val idxs = ArrayList<Int>()
+        for (i in real.indices) if (real[i]) idxs.add(i)
+        if (idxs.size < 2) return RightEdge.Connected
+        val gaps = ArrayList<Int>(idxs.size)
+        for (i in 1 until idxs.size) gaps.add(idxs[i] - idxs[i - 1] - 1)
+        val sorted = gaps.sorted()
+        val body = if (sorted.size >= 8) sorted.subList(0, sorted.size - 1) else sorted
+        val p95 = if (body.isEmpty()) 0 else body[((body.size - 1) * 95) / 100]
+        // Typical holes of this trace, widened so one missed patch is not a new object.
+        val bridge = max(4, p95 * 3 + 2)
+        // A break has to be wider than both a short missed patch and this trace's own spacing.
+        // Length/20 matches the scale already used for a detached speck, with a floor so a
+        // handful of empty columns on a short trace is still one stroke.
+        val detach = max(max(18, real.size / 20), bridge * 3)
+        var at = idxs.lastIndex
+        while (at > 0 && idxs[at] - idxs[at - 1] - 1 <= detach) at--
+        if (at == 0) return RightEdge.Connected
+        val prev = idxs[at - 1]
+        val start = idxs[at]
+        val rightFrom = start
+        val rightTo = idxs.last()
+        var rightCount = 0
+        var lo = path[start]
+        var hiY = path[start]
+        for (j in at until idxs.size) {
+            rightCount++
+            val y = path[idxs[j]]
+            if (y < lo) lo = y
+            if (y > hiY) hiY = y
+        }
+        val span = hiY - lo
+        val steps = ArrayList<Double>()
+        for (i in 1 until at) {
+            val a = idxs[i - 1]
+            val b = idxs[i]
+            if (b - a - 1 <= 1) steps.add(abs(path[b] - path[a]))
+        }
+        val tail = if (steps.size > 40) steps.subList(steps.size - 40, steps.size) else steps
+        val local = if (tail.isEmpty()) 0.0 else tail.sorted()[tail.size / 2]
+        val jump = abs(path[start] - path[prev])
+        // Budget does not grow with the empty gap. A long flight cannot turn a distant island
+        // into a continuation just because recent ticks were steep. The right piece may be as
+        // tall as its own span plus a few local steps, which is how a sharp but sampled move looks.
+        val allowance = max(local * 8.0, span + local * 4.0)
+        if (jump <= allowance) return RightEdge.Connected
+        val leftCount = at
+        val island = span * 3.0 < jump
+        val fragment = rightCount * 4 < leftCount
+        if (fragment && island) return RightEdge.Island(rightFrom, rightTo)
+        return RightEdge.Ambiguous
+    }
+
     /** path is price-up positive. real == null means every column was seen. */
     fun measure(path: DoubleArray?, realIn: BooleanArray?): Motion {
         if (path == null || path.size < 24) return Motion(false)
         val real = BooleanArray(path.size) { i -> realIn?.getOrNull(i) ?: true }
-        if (realIn != null) stripDetached(real)
+        if (realIn != null && !adoptConnectedTip(path, real)) return Motion(false)
         val hi = real.indexOfLast { it }
         if (hi < 23) return Motion(false)
         val window = max(24, (hi + 1) / 3)

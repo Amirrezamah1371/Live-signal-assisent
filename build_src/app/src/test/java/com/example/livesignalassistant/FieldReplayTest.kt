@@ -80,9 +80,9 @@ class FieldReplayTest {
                         var tr: TraceResult? = null
                         if (decoded != null) {
                             val (ys, real) = decoded
-                            TraceGeometry.stripDetached(real)
-                            tr = traceOf(ys, real)
-                            if (tr.tipGapFrac <= 0.25 && tr.realFrac >= 0.30 && tr.ys.size >= 72) {
+                            val connected = TraceGeometry.adoptConnectedTip(ys, real)
+                            tr = traceOf(ys, real, connected)
+                            if (tr.tipConnected && tr.tipGapFrac <= 0.25 && tr.realFrac >= 0.30 && tr.ys.size >= 72) {
                                 val path = DoubleArray(ys.size) { -ys[it] }
                                 val tip = tail(path, real)
                                 val info = engine.update(ts / 1000.0, path, real)
@@ -228,7 +228,7 @@ class FieldReplayTest {
         return vals.sorted()[vals.size / 2]
     }
 
-    private fun traceOf(ys: DoubleArray, real: BooleanArray): TraceResult {
+    private fun traceOf(ys: DoubleArray, real: BooleanArray, tipConnected: Boolean = true): TraceResult {
         var hi = -1
         var nReal = 0
         for (i in ys.indices) if (i < real.size && real[i]) {
@@ -237,7 +237,7 @@ class FieldReplayTest {
         }
         val realFrac = if (ys.isEmpty()) 0.0 else nReal.toDouble() / ys.size
         val tipGap = if (hi < 0 || ys.isEmpty()) 1.0 else (ys.size - 1 - hi).toDouble() / ys.size
-        return TraceResult(ys, real, realFrac, 0.0, 0.0, true, 0, 1, 0.8, 2, tipGap)
+        return TraceResult(ys, real, realFrac, 0.0, 0.0, true, 0, 1, 0.8, 2, tipGap, tipConnected)
     }
 
     private fun decodeTrace(b64: String): Pair<DoubleArray, BooleanArray>? {
