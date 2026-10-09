@@ -221,6 +221,10 @@ object CycleDecider {
         // A confirmed regime flip already followed the recent path. A continuation that the
         // recent path and either the frame or the final window reject is a stale base side.
         val staleDirection = fe.valid && !corrected && recentOpposes && (inFrameOpposes || votesOppose)
+        // A publish needs support at the entry point. This is continuous evidence, not an
+        // arbitrary frame count: either final-window directional weight favors the side, or
+        // the registered path's recency-weighted windows currently point to it.
+        val currentDirectionSupported = finSup > finOpp || recentSide == sideStr
         val safety = if (fe.valid) EntrySafety.block(
             fe.agreement, state, exhaustion, fe.impulseZ, fe.velocityRatio,
             fe.sincePeakSec, fe.counter, refuseW, directW,
@@ -270,13 +274,17 @@ object CycleDecider {
         out["local_retrace_against"] = retraceAgainst
         out["local_leg"] = local.leg
         out["stale_direction"] = staleDirection
+        out["current_direction_supported"] = currentDirectionSupported
+        out["final_support_weight"] = finSup
+        out["final_opposition_weight"] = finOpp
         out["scale_a"] = ce.debugState()["scale_a"]
         out["path_confirmed"] = pathConfirmed
 
         val reasonWait = DecisionGate.block(
             fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety,
             visionReliable = fe.valid && local.usable && !disagree,
-            staleDirection = staleDirection
+            staleDirection = staleDirection,
+            currentDirectionSupported = currentDirectionSupported
         )
         if (reasonWait.isNotEmpty())
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), reasonWait, diagnostics = out)
@@ -300,7 +308,8 @@ object DecisionGate {
         experienceAction: String,
         safety: String = "",
         visionReliable: Boolean = true,
-        staleDirection: Boolean = false
+        staleDirection: Boolean = false,
+        currentDirectionSupported: Boolean = true
     ): String = when {
         !recentValid -> "NO_RECENT_EVIDENCE"
         !visionReliable -> "VISION_UNRELIABLE"
@@ -309,6 +318,7 @@ object DecisionGate {
         state == "NOISE" -> "NOISE"
         safety.isNotEmpty() -> safety
         staleDirection -> "STALE_DIRECTION"
+        !currentDirectionSupported -> "CURRENT_DIRECTION_UNSUPPORTED"
         lateShare >= 0.5 -> "LATE_WINDOW"
         experienceAction == "AVOID" -> "EXPERIENCE_AVOID"
         entryQ < 32.0 -> "POOR_ENTRY"

@@ -1,6 +1,7 @@
 package com.example.livesignalassistant
 
 import org.json.JSONObject
+import org.junit.Assume.assumeTrue
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -17,7 +18,7 @@ import kotlin.math.max
 class FieldReplayTest {
     @Test
     fun replayDevelopmentSessionsWhenEnabled() {
-        if (System.getProperty("lsa.replay.dev") != "1") return
+        assumeTrue("development replay disabled", System.getProperty("lsa.replay.dev") == "1")
         val root = File(System.getProperty("lsa.replay.root").ifEmpty { "/tmp/lsa7203/extract/sessions" })
         val sessions = root.listFiles()?.filter { it.isDirectory && it.name.startsWith("20261008") }?.sortedBy { it.name }
             ?: emptyList()
@@ -29,7 +30,7 @@ class FieldReplayTest {
 
     @Test
     fun replayHoldoutSessionWhenEnabled() {
-        if (System.getProperty("lsa.replay.holdout") != "1") return
+        assumeTrue("holdout replay disabled", System.getProperty("lsa.replay.holdout") == "1")
         val root = File(System.getProperty("lsa.replay.root").ifEmpty { "/tmp/lsa7203/extract/sessions" })
         val session = File(root, "20261009_022815")
         assertTrue(session.isDirectory)
@@ -50,7 +51,10 @@ class FieldReplayTest {
         var prevTip = Double.NaN
         var prevRef = Double.NaN
         val logged = ArrayList<Pair<Int, String>>()
-        val results = ArrayList<String>()
+        val resultByCycle = HashMap<Int, String>()
+        val signalCycle = HashMap<String, Int>()
+        var lastDecisionCycle: Int? = null
+        var lastObservationTs = 0L
         val replayDir = HashMap<Int, String>()
         val replayReason = HashMap<Int, String>()
         val loggedVoteDir = HashMap<Int, String>()
@@ -67,6 +71,7 @@ class FieldReplayTest {
                 lastTs = ts
                 when (o.getString("type")) {
                     "BOT_OBSERVATION" -> {
+                        lastObservationTs = ts
                         val elapsed = o.optLong("cycle_elapsed_ms")
                         val d = o.optJSONObject("diagnostics")
                         val decoded = d?.optString("trace_b64")?.let { decodeTrace(it) }
@@ -110,10 +115,13 @@ class FieldReplayTest {
                     }
                     "NINETY_SECOND_DECISION" -> {
                         val cycle = o.optInt("cycle")
+                        lastDecisionCycle = cycle
                         val loggedDir = o.optString("direction")
                         logged += Pair(cycle, loggedDir)
-                        val decision = CycleDecider.decide(observations.toList(), 90000L, engine, lastT, quiet(), 0L)
-                        val fromLog = CycleDecider.decide(loggedObs.toList(), 90000L, engine, lastT, quiet(), 0L)
+                        val decisionT = ts / 1000.0
+                        val staleMs = if (lastObservationTs == 0L) Long.MAX_VALUE else (ts - lastObservationTs).coerceAtLeast(0L)
+                        val decision = CycleDecider.decide(observations.toList(), 90000L, engine, decisionT, quiet(), staleMs)
+                        val fromLog = CycleDecider.decide(loggedObs.toList(), 90000L, engine, decisionT, quiet(), staleMs)
                         cycles++
                         replayDir[cycle] = decision.direction
                         replayReason[cycle] = decision.reason
@@ -127,15 +135,23 @@ class FieldReplayTest {
                         replayNote[cycle] = "z3=${num("slope_3s")} z6=${num("slope_6s")} z10=${num("slope_10s")} z20=${num("slope_20s")} agree=${num("window_agreement")} state=${num("final_state")} recent=${num("recent_invalid_reason")} pts=${num("series_points")} span=${num("series_span_s")} dirN=${num("path_usable")} leg=${num("local_leg")} net=${num("local_net")} rel=${num("vision_reliability")} path=${num("path_confirmed")}"
                         observations.clear()
                         loggedObs.clear()
+                        lastObservationTs = 0L
                         SignalAnalyzer.reset()
                     }
-                    "TRADE_RESULT" -> results += o.optString("result")
+                    "SIGNAL_PUBLISHED" -> {
+                        val id = o.optString("signal_id")
+                        val cycle = lastDecisionCycle
+                        if (id.isNotEmpty() && cycle != null) signalCycle[id] = cycle
+                    }
+                    "TRADE_RESULT" -> {
+                        val cycle = signalCycle[o.optString("signal_id")]
+                        if (cycle != null) resultByCycle[cycle] = o.optString("result")
+                    }
                 }
             }
         }
         val labeled = ArrayList<String>()
         val every = ArrayList<String>()
-        var resultIdx = 0
         var blockedWins = 0
         var blockedLosses = 0
         var sameWins = 0
@@ -153,8 +169,7 @@ class FieldReplayTest {
                 if (replayed != "WAIT") unlabeledSignals++
                 continue
             }
-            if (resultIdx >= results.size) break
-            val outcome = results[resultIdx++]
+            val outcome = resultByCycle[cycle] ?: continue
             labeled += "cycle $cycle logged $loggedDir replay $replayed ${replayReason[cycle]} votes ${loggedVoteDir[cycle]} ${loggedVoteReason[cycle]} $outcome ${replayNote[cycle]}"
             when {
                 replayed == "WAIT" && outcome == "WIN" -> blockedWins++

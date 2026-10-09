@@ -99,13 +99,14 @@ class VisionMechanismsTest {
     fun noisyFramesDoNotCompoundTheScale() {
         val rng = Random(3)
         val ce = ChangeEngine()
-        repeat(25) { t ->
+        repeat(100) { t ->
             val p = DoubleArray(180) { i -> 60.0 + 0.15 * i + 12.0 * sin(i / 8.0) + rng.nextGaussian() * 2.5 }
             ce.update(t.toDouble(), p)
         }
         val scale = ce.debugState()["scale_a"] as Double
-        assertTrue("scale ran away: $scale", kotlin.math.abs(scale) < 5.0)
-        assertTrue((ce.debugState()["scale_a"] as Double).isFinite())
+        assertTrue("fixed viewport scale drifted: $scale", scale in 0.75..1.25)
+        assertTrue(scale.isFinite())
+        assertTrue("reference became non-finite", (ce.debugState()["last"] as Double).isFinite())
     }
 
     @Test
@@ -158,6 +159,13 @@ class VisionMechanismsTest {
             TraceGeometry.channelsDisagree(0.2, falling)
         )
         assertFalse("the same weak slope agrees with a rising leg", TraceGeometry.channelsDisagree(0.2, rising))
+        assertTrue(
+            "registered fall must disagree with a material visible rise",
+            TraceGeometry.channelsDisagree(-2.0, TraceGeometry.measure(
+                DoubleArray(180) { i -> if (i < 140) 160.0 - i * 0.6 else 76.0 + (i - 140) * 6.0 },
+                null
+            ))
+        )
     }
 
     @Test
@@ -193,7 +201,8 @@ class VisionMechanismsTest {
         repeat(16) { chased.update(it.toDouble(), ramp(it * 2)) }
         chased.update(16.0, ramp(32, tip = -90.0))
         val waited = CycleDecider.decide(votes("UP"), 90000L, chased, 16.0, none(), 0L)
-        assertNotEquals("UP", waited.direction)
+        assertEquals("WAIT", waited.direction)
+        assertEquals("AGAINST_RECENT", waited.reason)
         val held = feed((0 until 16).map { swing(0.0) })
         val published = CycleDecider.decide(votes("UP"), 90000L, held, 15.0, none(), 0L)
         assertEquals(published.reason, "UP", published.direction)
@@ -213,16 +222,17 @@ class VisionMechanismsTest {
         val ce = ChangeEngine()
         repeat(16) { ce.update(it.toDouble(), ramp(it * 2)) }
         val alien = DoubleArray(180) { i ->
-            if (i < 120) if (i % 2 == 0) 2500.0 else -2500.0 else 80.0 - (i - 120) * 4.0
+            when {
+                i < 110 -> if (i % 2 == 0) 2500.0 else -2500.0
+                i < 150 -> 40.0 + (i - 110) * 0.5
+                else -> 60.0 - (i - 150) * 4.0
+            }
         }
         ce.update(16.0, alien)
         val result = CycleDecider.decide(votes("UP"), 90000L, ce, 16.0, none(), 0L)
-        assertNotEquals("UP", result.direction)
-        assertTrue(
-            result.reason,
-            result.reason == "VISION_UNRELIABLE" || result.reason == "RAW_LEG_OPPOSES" ||
-                result.reason == "FAILED_EXTREME" || result.reason == "AGAINST_RECENT"
-        )
+        assertEquals("WAIT", result.direction)
+        assertEquals("VISION_UNRELIABLE", result.reason)
+        assertEquals(true, result.diagnostics["channel_disagree"])
     }
 
     @Test
@@ -277,6 +287,13 @@ class VisionMechanismsTest {
         assertEquals(
             "RAW_LEG_OPPOSES",
             DecisionGate.block(true, true, "CONTINUING", 0.0, 90.0, 99.0, "NONE", "RAW_LEG_OPPOSES")
+        )
+        assertEquals(
+            "CURRENT_DIRECTION_UNSUPPORTED",
+            DecisionGate.block(
+                true, true, "CONTINUING", 0.0, 90.0, 99.0, "NONE",
+                currentDirectionSupported = false
+            )
         )
     }
 

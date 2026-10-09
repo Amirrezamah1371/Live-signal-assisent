@@ -112,10 +112,11 @@ class ChangeEngine {
             }
             vx /= len; cov /= len; vy /= len
             if (vx < 1e-9) continue
-            // Both frames are noisy, so ordinary least squares (cov / vx) is biased below the
-            // true scale and the bias compounds. Equal-variance Deming regression is symmetric
-            // in the two frames: when the spreads match it stays near 1, and a real zoom is kept.
-            val aRaw = demingSlope(vx, vy, cov)
+            // Scale is a viewport property, so estimate it from robust central spreads rather
+            // than from covariance. OLS attenuates under extraction noise; Deming can swing with
+            // changing trace shape. A real affine zoom scales both central spreads equally.
+            if (cov <= 1e-12) continue
+            val aRaw = robustScale(xs, ys)
             if (!aRaw.isFinite() || aRaw <= 0.0) continue
             val a = aRaw.coerceIn(0.35, 2.8)
             val offsets = DoubleArray(len) { i -> ys[i] - a * xs[i] }
@@ -133,20 +134,25 @@ class ChangeEngine {
         return best
     }
 
-    /** Equal-variance Deming slope of y on x. NaN when the overlap has no shared direction. */
-    private fun demingSlope(vx: Double, vy: Double, cov: Double): Double {
-        if (vx < 1e-9 || abs(cov) < 1e-12) return Double.NaN
-        val disc = (vy - vx) * (vy - vx) + 4.0 * cov * cov
-        return (vy - vx + sqrt(disc)) / (2.0 * cov)
+    /** Ratio of the middle 80% ranges. Exact for an affine zoom and robust to tip/outlier pixels. */
+    private fun robustScale(xs: List<Double>, ys: List<Double>): Double {
+        if (xs.size < 5 || ys.size != xs.size) return Double.NaN
+        val sx = xs.sorted()
+        val sy = ys.sorted()
+        fun spread(v: List<Double>): Double {
+            val lo = ((v.size - 1) * 0.10).toInt()
+            val hi = ((v.size - 1) * 0.90).toInt()
+            return v[hi] - v[lo]
+        }
+        val dx = spread(sx)
+        val dy = spread(sy)
+        return if (dx > 1e-9 && dy > 1e-9) dy / dx else Double.NaN
     }
 
-    private fun scaleIsStable(aFrame: Double, bFrame: Double, baseA: Double, baseB: Double): Boolean {
-        if (!aFrame.isFinite() || aFrame == 0.0) return false
-        val newA = baseA / aFrame
-        val newB = baseB - baseA * bFrame / aFrame
-        // A single accepted zoom is at most the clamp (2.8). Tens of compounded zooms, or a
-        // non-finite offset, means the coordinate has run away and must not be appended.
-        return newA.isFinite() && newB.isFinite() && abs(newA) <= 40.0 && abs(newB) <= 1.0e5
+    private fun scaleIsStable(aFrame: Double, bFrame: Double): Boolean {
+        // The retained history is rebased into every accepted frame, so no cumulative affine
+        // state is needed for motion. Keep only physically finite per-frame transforms.
+        return aFrame.isFinite() && aFrame in 0.35..2.8 && bFrame.isFinite() && abs(bFrame) <= 1.0e5
     }
 
     private fun tailMedian(p: DoubleArray, real: BooleanArray?): Double {
@@ -178,9 +184,13 @@ class ChangeEngine {
 
     private fun appendPoint(t: Double, p: DoubleArray, real: BooleanArray?) {
         val med = tailMedian(p, real)
-        val v = scaleA * med + scaleB
-        ts.add(t); vs.add(v)
+        ts.add(t); vs.add(med)
         while (ts.isNotEmpty() && t - ts[0] > 45.0) { ts.removeAt(0); vs.removeAt(0) }
+    }
+
+    /** Existing samples are in the previous frame's coordinates; move all of them together. */
+    private fun rebase(values: ArrayList<Double>, a: Double, b: Double) {
+        for (i in values.indices) values[i] = a * values[i] + b
     }
 
     /** Drop points that sit before a hole. The hole is not filled. */
@@ -243,11 +253,12 @@ class ChangeEngine {
             if (r != null) {
                 dScore = r[0]; dShift = r[1]; dARaw = r[4]; dB = r[3]; dLen = r[5].toInt(); dRes = r[6]; dClamped = abs(r[4] - r[2]) > 1e-9
             }
-            val stable = r != null && r[0] < 0.30 && scaleIsStable(r[2], r[3], scaleA, scaleB)
+            val stable = r != null && r[0] < 0.30 && scaleIsStable(r[2], r[3])
             if (r != null && stable) {
                 shift = r[1]; aUsed = r[2]; reg = "OK"; logStatus = "OK"; reason = "ACCEPTED"
-                scaleB = scaleB - scaleA * r[3] / r[2]
-                scaleA = scaleA / r[2]
+                rebase(vs, r[2], r[3])
+                scaleA = r[2]
+                scaleB = r[3]
                 prevP = p.copyOf(); prevReal = cleaned?.copyOf(); prevT = t
                 appendPoint(t, p, cleaned)
                 failStreak = 0; provisional = false; lastOkT = t
@@ -306,12 +317,13 @@ class ChangeEngine {
         val cp = candP
         if (cp != null && t > candT && t - candT <= 3.5) {
             val cr = register(cp, p, candReal, real)
-            if (cr != null && cr[0] < 0.30 && scaleIsStable(cr[2], cr[3], candA, candB)) {
-                candB = candB - candA * cr[3] / cr[2]
-                candA = candA / cr[2]
+            if (cr != null && cr[0] < 0.30 && scaleIsStable(cr[2], cr[3])) {
+                rebase(candVs, cr[2], cr[3])
+                candA = cr[2]
+                candB = cr[3]
                 candP = p.copyOf(); candReal = real?.copyOf(); candT = t; candProv = false; candMisses = 0
                 val med = tailMedian(p, real)
-                candTs.add(t); candVs.add(candA * med + candB)
+                candTs.add(t); candVs.add(med)
                 while (candTs.isNotEmpty() && t - candTs[0] > 45.0) { candTs.removeAt(0); candVs.removeAt(0) }
                 val span = candTs.last() - candTs[0]
                 if (!candProv && candTs.size >= 8 && span >= 12.0) {
@@ -404,8 +416,7 @@ class ChangeEngine {
         if (n < 8) return null
         val v3 = (g[n - 1] - g[n - 4]) / 3.0
         val v3p = (g[n - 4] - g[n - 7]) / 3.0
-        val a = if (scaleA != 0.0) scaleA else 1.0
-        return Pair(v3 / a, ((v3 - v3p) / 3.0) / a)
+        return Pair(v3, (v3 - v3p) / 3.0)
     }
 
     @Synchronized

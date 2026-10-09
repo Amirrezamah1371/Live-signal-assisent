@@ -63,8 +63,12 @@ class ForensicFixesTest {
         assertEquals("OK", info["reg_status"])
         assertEquals(2.0, info["reg_best_shift"] as Double, 1e-6)
         assertEquals(1.4, info["reg_a"] as Double, 1e-6)
-        val dv = (ce.debugState()["last"] as Double) - v0
-        assertEquals(57.365, dv, 0.30)
+        // The retained history is rebased into the current frame. Compare the new tip with the
+        // transformed old tip; comparing absolute values from two viewports is meaningless.
+        val oldTipInNewFrame = (info["reg_a"] as Double) * v0 + (info["reg_b"] as Double)
+        val residualTipMove = (ce.debugState()["last"] as Double) - oldTipInNewFrame
+        assertTrue("tip residual was lost: $residualTipMove", residualTipMove > 50.0)
+        assertTrue("tip residual was amplified: $residualTipMove", residualTipMove < 110.0)
     }
 
     @Test
@@ -121,7 +125,8 @@ class ForensicFixesTest {
         val old = scrolled(0)
         val nw = scrolled(2, scale = 1.2, bias = 4.0)
         val real = BooleanArray(nw.size) { true }
-        for (i in 0 until 6) { real[i] = false; nw[i] = 0.0 }
+        // More than the 15% residual trimming budget, so unmasked contamination must be visible.
+        for (i in 0 until 30) { real[i] = false; nw[i] = 0.0 }
         for (i in nw.size - 8 until nw.size) { real[i] = false; nw[i] = 999.0 }
         val bare = ChangeEngine()
         bare.update(0.0, old)
