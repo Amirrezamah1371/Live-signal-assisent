@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.livesignalassistant.forensic7202"
         minSdk = 26
         targetSdk = 35
-        versionCode = 51
-        versionName = "72.0.4-VISION-REPAIR"
+        versionCode = 52
+        versionName = "72.0.5-STRUCTURAL-WAVE-REPAIR"
     }
 
     signingConfigs {
