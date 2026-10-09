@@ -53,6 +53,9 @@ class ChangeEngine {
     private val candTs = ArrayList<Double>()
     private val candVs = ArrayList<Double>()
     private var candProv = true
+    private var candMisses = 0
+    private var seenPath: DoubleArray? = null
+    private var seenReal: BooleanArray? = null
 
     @Synchronized
     fun reset() {
@@ -60,6 +63,7 @@ class ChangeEngine {
         ts.clear(); vs.clear(); lastReg = "NEW"; regLog.clear()
         failStreak = 0; provisional = true; lastOkT = -1.0
         clearCandidate()
+        seenPath = null; seenReal = null
     }
 
     @Synchronized fun pointCount(): Int = ts.size
@@ -70,7 +74,8 @@ class ChangeEngine {
         "provisional" to provisional,
         "fail_streak" to failStreak,
         "last_ok_t" to lastOkT,
-        "candidate_points" to candTs.size
+        "candidate_points" to candTs.size,
+        "scale_a" to scaleA
     )
 
     /**
@@ -107,9 +112,16 @@ class ChangeEngine {
             }
             vx /= len; cov /= len; vy /= len
             if (vx < 1e-9) continue
-            val aRaw = cov / vx
+            // Scale is a viewport property, so estimate it from robust central spreads rather
+            // than from covariance. OLS attenuates under extraction noise; Deming can swing with
+            // changing trace shape. A real affine zoom scales both central spreads equally.
+            if (cov <= 1e-12) continue
+            val aRaw = robustScale(xs, ys)
+            if (!aRaw.isFinite() || aRaw <= 0.0) continue
             val a = aRaw.coerceIn(0.35, 2.8)
-            val b = my - a * mx
+            val offsets = DoubleArray(len) { i -> ys[i] - a * xs[i] }
+            offsets.sort()
+            val b = offsets[len / 2]
             val absErr = DoubleArray(len) { i -> abs(ys[i] - (a * xs[i] + b)) }
             absErr.sort()
             val keep = max(1, (len * 0.85).toInt())
@@ -120,6 +132,27 @@ class ChangeEngine {
             if (best == null || sc < best[0]) best = doubleArrayOf(sc, s.toDouble(), a, b, aRaw, len.toDouble(), res)
         }
         return best
+    }
+
+    /** Ratio of the middle 80% ranges. Exact for an affine zoom and robust to tip/outlier pixels. */
+    private fun robustScale(xs: List<Double>, ys: List<Double>): Double {
+        if (xs.size < 5 || ys.size != xs.size) return Double.NaN
+        val sx = xs.sorted()
+        val sy = ys.sorted()
+        fun spread(v: List<Double>): Double {
+            val lo = ((v.size - 1) * 0.10).toInt()
+            val hi = ((v.size - 1) * 0.90).toInt()
+            return v[hi] - v[lo]
+        }
+        val dx = spread(sx)
+        val dy = spread(sy)
+        return if (dx > 1e-9 && dy > 1e-9) dy / dx else Double.NaN
+    }
+
+    private fun scaleIsStable(aFrame: Double, bFrame: Double): Boolean {
+        // The retained history is rebased into every accepted frame, so no cumulative affine
+        // state is needed for motion. Keep only physically finite per-frame transforms.
+        return aFrame.isFinite() && aFrame in 0.35..2.8 && bFrame.isFinite() && abs(bFrame) <= 1.0e5
     }
 
     private fun tailMedian(p: DoubleArray, real: BooleanArray?): Double {
@@ -146,14 +179,18 @@ class ChangeEngine {
 
     private fun clearCandidate() {
         candP = null; candReal = null; candT = -1.0; candA = 1.0; candB = 0.0
-        candTs.clear(); candVs.clear(); candProv = true
+        candTs.clear(); candVs.clear(); candProv = true; candMisses = 0
     }
 
     private fun appendPoint(t: Double, p: DoubleArray, real: BooleanArray?) {
         val med = tailMedian(p, real)
-        val v = scaleA * med + scaleB
-        ts.add(t); vs.add(v)
+        ts.add(t); vs.add(med)
         while (ts.isNotEmpty() && t - ts[0] > 45.0) { ts.removeAt(0); vs.removeAt(0) }
+    }
+
+    /** Existing samples are in the previous frame's coordinates; move all of them together. */
+    private fun rebase(values: ArrayList<Double>, a: Double, b: Double) {
+        for (i in values.indices) values[i] = a * values[i] + b
     }
 
     /** Drop points that sit before a hole. The hole is not filled. */
@@ -175,7 +212,7 @@ class ChangeEngine {
         candP = p.copyOf(); candReal = real?.copyOf(); candT = t
         candA = 1.0; candB = 0.0; candProv = true
         candTs.clear(); candVs.clear()
-        candTs.add(t); candVs.add(tailMedian(p, real))
+        candTs.add(t); candVs.add(tailMedian(p, real)); candMisses = 0
     }
 
     private fun promoteCandidate() {
@@ -190,9 +227,16 @@ class ChangeEngine {
         clearCandidate()
     }
 
+    /** Latest frame's in-frame shape. Independent of the registered scale. */
+    @Synchronized
+    fun localMotion(): TraceGeometry.Motion = TraceGeometry.measure(seenPath, seenReal)
+
     /** p: path with price-up positive (pixel units). real: true where that column was actually seen. t: monotonic seconds. */
     @Synchronized
     fun update(t: Double, p: DoubleArray, real: BooleanArray? = null): Map<String, Any?> {
+        val cleaned = real?.copyOf()
+        if (cleaned != null) TraceGeometry.stripDetached(cleaned)
+        seenPath = p.copyOf(); seenReal = cleaned
         var reg = "NEW"; var logStatus = "NEW"; var shift = 0.0; var aUsed = 1.0
         var reason = "NO_PREVIOUS_FRAME"
         var dScore = -1.0; var dShift = -1.0; var dARaw = 0.0; var dB = 0.0; var dLen = 0; var dRes = -1.0; var dClamped = false
@@ -200,37 +244,44 @@ class ChangeEngine {
         val prevTBefore = prevT
         val oldN = pp?.size ?: 0
             if (pp == null) {
-            seedTrusted(t, p, real)
+            seedTrusted(t, p, cleaned)
             logStatus = "NEW"
         } else if (t <= prevT) {
             reg = "GAP"; logStatus = "GAP"; reason = "TIME_NOT_ADVANCING"
         } else {
-            val r = register(pp, p, prevReal, real)
+            val r = register(pp, p, prevReal, cleaned)
             if (r != null) {
                 dScore = r[0]; dShift = r[1]; dARaw = r[4]; dB = r[3]; dLen = r[5].toInt(); dRes = r[6]; dClamped = abs(r[4] - r[2]) > 1e-9
             }
-            if (r != null && r[0] < 0.30) {
+            val stable = r != null && r[0] < 0.30 && scaleIsStable(r[2], r[3])
+            if (r != null && stable) {
                 shift = r[1]; aUsed = r[2]; reg = "OK"; logStatus = "OK"; reason = "ACCEPTED"
-                scaleB = scaleB - scaleA * r[3] / r[2]
-                scaleA = scaleA / r[2]
-                prevP = p.copyOf(); prevReal = real?.copyOf(); prevT = t
-                appendPoint(t, p, real)
+                rebase(vs, r[2], r[3])
+                scaleA = r[2]
+                scaleB = r[3]
+                prevP = p.copyOf(); prevReal = cleaned?.copyOf(); prevT = t
+                appendPoint(t, p, cleaned)
                 failStreak = 0; provisional = false; lastOkT = t
                 clearCandidate()
             } else {
                 failStreak++
-                val why = if (r == null) "NO_VALID_SHIFT" else if (dClamped) "SCORE_ABOVE_0.30_SCALE_CLAMPED" else "SCORE_ABOVE_0.30"
+                val why = when {
+                    r == null -> "NO_VALID_SHIFT"
+                    r[0] < 0.30 -> "SCALE_UNSTABLE"
+                    dClamped -> "SCORE_ABOVE_0.30_SCALE_CLAMPED"
+                    else -> "SCORE_ABOVE_0.30"
+                }
                 val unconfirmed = provisional && ts.size < 8
                 val lostTooLong = lastOkT >= 0.0 && t - lastOkT > 15.0
                 if (unconfirmed || lostTooLong) {
                     // The old geometry is not evidence anymore. This frame starts a new provisional
                     // seed. It is not appended onto the prices it failed to match.
-                    seedTrusted(t, p, real)
+                    seedTrusted(t, p, cleaned)
                     reg = if (lostTooLong) "GAP" else "FAIL"
                     logStatus = reg
                     reason = if (lostTooLong) "INVALIDATED_$why" else "SEED_$why"
                 } else {
-                    reason = holdOnCandidate(t, p, real, why)
+                    reason = holdOnCandidate(t, p, cleaned, why)
                     // The frame is still a failed accept. Trust ignores it, because trusted history was not changed.
                     if (reason == "PROMOTED_CANDIDATE") {
                         reg = "OK"; logStatus = "OK"
@@ -253,7 +304,8 @@ class ChangeEngine {
             "reg_b" to dB, "reg_overlap_len" to dLen, "reg_resid_rel" to dRes,
             "reg_old_n" to oldN, "reg_new_n" to p.size, "reg_t" to t, "reg_prev_t" to prevTBefore,
             "reg_provisional" to provisional, "reg_fail_streak" to failStreak,
-            "reg_candidate_points" to candTs.size
+            "reg_candidate_points" to candTs.size,
+            "scale_a" to scaleA, "scale_b" to scaleB
         )
     }
 
@@ -265,12 +317,13 @@ class ChangeEngine {
         val cp = candP
         if (cp != null && t > candT && t - candT <= 3.5) {
             val cr = register(cp, p, candReal, real)
-            if (cr != null && cr[0] < 0.30) {
-                candB = candB - candA * cr[3] / cr[2]
-                candA = candA / cr[2]
-                candP = p.copyOf(); candReal = real?.copyOf(); candT = t; candProv = false
+            if (cr != null && cr[0] < 0.30 && scaleIsStable(cr[2], cr[3])) {
+                rebase(candVs, cr[2], cr[3])
+                candA = cr[2]
+                candB = cr[3]
+                candP = p.copyOf(); candReal = real?.copyOf(); candT = t; candProv = false; candMisses = 0
                 val med = tailMedian(p, real)
-                candTs.add(t); candVs.add(candA * med + candB)
+                candTs.add(t); candVs.add(med)
                 while (candTs.isNotEmpty() && t - candTs[0] > 45.0) { candTs.removeAt(0); candVs.removeAt(0) }
                 val span = candTs.last() - candTs[0]
                 if (!candProv && candTs.size >= 8 && span >= 12.0) {
@@ -278,6 +331,12 @@ class ChangeEngine {
                     return "PROMOTED_CANDIDATE"
                 }
                 return "CANDIDATE_ACCEPTED"
+            }
+            // One missed frame is temporarily unobservable. It does not append and does not
+            // throw away a candidate that was otherwise continuous.
+            if (candMisses == 0) {
+                candMisses = 1
+                return "HELD_$why"
             }
         }
         seedCandidate(t, p, real)
@@ -357,8 +416,7 @@ class ChangeEngine {
         if (n < 8) return null
         val v3 = (g[n - 1] - g[n - 4]) / 3.0
         val v3p = (g[n - 4] - g[n - 7]) / 3.0
-        val a = if (scaleA != 0.0) scaleA else 1.0
-        return Pair(v3 / a, ((v3 - v3p) / 3.0) / a)
+        return Pair(v3, (v3 - v3p) / 3.0)
     }
 
     @Synchronized

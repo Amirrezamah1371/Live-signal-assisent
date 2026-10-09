@@ -23,14 +23,14 @@ class CaptureService:Service(){
  private var projection:MediaProjection?=null;private var reader:ImageReader?=null;private var display:VirtualDisplay?=null
  private var wm:WindowManager?=null;private var brain:TextView?=null;private val bubbles=mutableListOf<View>();private val main=Handler(Looper.getMainLooper());private val worker=Executors.newSingleThreadExecutor();private val evidenceWorker=Executors.newSingleThreadExecutor();private val busy=AtomicBoolean(false)
  private lateinit var memory:MemoryStore;private lateinit var experience:ExperienceStore;private lateinit var pending:PendingTradeStore;private var lastFrameAt=0L;private var lastEvidenceAt=0L;private var cycleStart=SystemClock.elapsedRealtime();private var nextDecisionAt=cycleStart+90000L;private var nextObservationAt=cycleStart+1000L;private val observations=mutableListOf<Obs>();private var cycle=1;private val change=ChangeEngine();private var lastObsAt=0L
- override fun onCreate(){super.onCreate();memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("72.0.3 · Repair").setContentText("80s deep observation · 10s final decision · 1m expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
+ override fun onCreate(){super.onCreate();memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("72.0.4 · Vision").setContentText("80s deep observation · 10s final decision · 1m expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
   if(i?.action==ACTION_EXPORT){val p=memory.exportZip();Toast.makeText(this,"Memory exported: $p",Toast.LENGTH_LONG).show();return START_NOT_STICKY}
   if(!Settings.canDrawOverlays(this)){stopSelf();return START_NOT_STICKY};showBrain();val code=i?.getIntExtra(EXTRA_RESULT_CODE,Activity.RESULT_CANCELED)?:Activity.RESULT_CANCELED;val data:Intent?=if(Build.VERSION.SDK_INT>=33)i?.getParcelableExtra(EXTRA_RESULT_DATA,Intent::class.java) else @Suppress("DEPRECATION") i?.getParcelableExtra(EXTRA_RESULT_DATA)
   if(code!=Activity.RESULT_OK||data==null){stopSelf();return START_NOT_STICKY};if(projection!=null)return START_NOT_STICKY;val mgr=getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager;projection=mgr.getMediaProjection(code,data);projection?.registerCallback(object:MediaProjection.Callback(){override fun onStop(){stopSelf()}},main);startCapture();return START_NOT_STICKY
  }
  private fun glass(stroke:Int=0x55FFFFFF)=GradientDrawable().apply{setColor(0xB8FFFFFF.toInt());cornerRadius=42f;setStroke(2,stroke)}
- private fun showBrain(){main.post{if(brain!=null)return@post;wm=getSystemService(WINDOW_SERVICE) as WindowManager;val v=TextView(this).apply{text="72.0.3 · DIAG\ncycle 1";textSize=13f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(18,12,18,12);background=glass();elevation=16f};val lp=params(Gravity.TOP or Gravity.END,18,190);wm!!.addView(v,lp);brain=v}}
+ private fun showBrain(){main.post{if(brain!=null)return@post;wm=getSystemService(WINDOW_SERVICE) as WindowManager;val v=TextView(this).apply{text="72.0.4 · DIAG\ncycle 1";textSize=13f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(18,12,18,12);background=glass();elevation=16f};val lp=params(Gravity.TOP or Gravity.END,18,190);wm!!.addView(v,lp);brain=v}}
  private fun params(g:Int,x:Int,y:Int)=WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,if(Build.VERSION.SDK_INT>=26)WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply{gravity=g;this.x=x;this.y=y}
  private fun startCapture(){val m=resources.displayMetrics;reader=ImageReader.newInstance(m.widthPixels,m.heightPixels,PixelFormat.RGBA_8888,2);display=projection?.createVirtualDisplay("LSA70",m.widthPixels,m.heightPixels,m.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,reader!!.surface,null,main);reader?.setOnImageAvailableListener({r->val now=SystemClock.elapsedRealtime();val im=r.acquireLatestImage()?:return@setOnImageAvailableListener;if(now-lastFrameAt<250||busy.get()){im.close();return@setOnImageAvailableListener};lastFrameAt=now;busy.set(true);try{val p=im.planes[0];val pad=p.rowStride-p.pixelStride*im.width;val tmp=Bitmap.createBitmap(im.width+pad/p.pixelStride,im.height,Bitmap.Config.ARGB_8888);tmp.copyPixelsFromBuffer(p.buffer);val b=Bitmap.createBitmap(tmp,0,0,im.width,im.height);tmp.recycle();worker.execute{try{processFrame(b,now)}finally{b.recycle();busy.set(false)}}}catch(_:Throwable){busy.set(false)}finally{im.close()}},main)}
  private fun recordFrameAsync(b:Bitmap,tag:String){
@@ -60,7 +60,7 @@ class CaptureService:Service(){
   }
   val left=max(0,((nextDecisionAt-now+999)/1000).toInt())
    val phase=if(elapsed<80000L)"DEEP OBSERVATION" else "FINAL DECISION"
-   main.post{brain?.text="72.0.3 · 90S · $phase ${left}s\ncycle $cycle"}
+   main.post{brain?.text="72.0.4 · 90S · $phase ${left}s\ncycle $cycle"}
   if(now>=nextDecisionAt){
    finishCycle(b,nextDecisionAt)
    // Anchor cycles to the monotonic schedule, never to a late frame; this prevents cumulative drift.
@@ -108,7 +108,7 @@ class CaptureService:Service(){
  private fun dp(v:Int)=(v*resources.displayMetrics.density).roundToInt()
  private fun spawn(r:SignalResult){
   val manager=wm?:return;val arrow=if(r.direction=="UP")"↑" else "↓";val signalId=UUID.randomUUID().toString()
-  val percentText=if(r.signalQuality>0)"STR ${r.signalQuality}" else "STR --"
+  val percentText=if(r.signalQuality>0)"EV ${r.signalQuality}" else "EV --"
   val v=TextView(this).apply{text="$arrow ${r.direction} · ${r.expirySeconds/60}m · $percentText\nOPEN";textSize=11f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(dp(8),dp(5),dp(8),dp(5));background=glass();elevation=18f}
   val lp=params(Gravity.TOP or Gravity.START,dp(4),dp(120)+bubbles.size*dp(52));manager.addView(v,lp);bubbles+=v;restack()
   memory.event("SIGNAL_PUBLISHED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"confidence_state" to "STRENGTH_NOT_PROBABILITY","model_score" to r.signalQuality,"auto_expire_s" to 15,"publish_mono_ms" to SystemClock.elapsedRealtime(),"diagnostics" to r.diagnostics));val publishedMono=SystemClock.elapsedRealtime();var locked=false

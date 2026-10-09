@@ -70,7 +70,7 @@ object MemoryExporter {
                 zip.closeEntry()
             }
             zip.putNextEntry(ZipEntry("README.txt"))
-            zip.write("Live Signal Assistant 72.0.3 memory export. STRENGTH is an evidence-quality measure and is NOT a calibrated win probability. Session memory is deleted only after explicit user confirmation. Permanent Experience Core is NEVER cleared by session cleanup.\n".toByteArray())
+            zip.write("Live Signal Assistant 72.0.4 memory export. EV is direction evidence and is NOT a calibrated win probability. Session memory is deleted only after explicit user confirmation. Permanent Experience Core is NEVER cleared by session cleanup.\n".toByteArray())
             zip.closeEntry()
         }
 
