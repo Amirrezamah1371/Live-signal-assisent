@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36,60,36,36) }
         root.addView(TextView(this).apply {
-            text = "Live Signal Assistant 72.0.3\n\nRepair build · Experience V3\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
+            text = "Live Signal Assistant 72.0.4\n\nVision repair · Experience V3\nEV is evidence, not a probability.\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
             textSize = 20f
         })
         root.addView(Button(this).apply {

@@ -26,13 +26,19 @@ object SignalAnalyzer {
 
     @Synchronized fun reset(){votes.clear();directionVotes.clear();lastSignalAt=0;lastSignalSign=0;lastSignalExpiry=0;lastSignalScore=0.0;lastSignalEntry=0.0;lastSetupKey=""}
 
-    @Synchronized fun analyze(b:Bitmap,tr:TraceResult?,velocityPx:Double,accelPx:Double):SignalResult{
-        val w=b.width; val h=b.height
+    @Synchronized fun analyze(b:Bitmap,tr:TraceResult?,velocityPx:Double,accelPx:Double):SignalResult =
+        analyze(b.width, b.height, tr, velocityPx, accelPx)
+
+    /** Width and height are the captured frame. Replay uses this directly so the same gates run without a bitmap. */
+    @Synchronized fun analyze(w:Int,h:Int,tr:TraceResult?,velocityPx:Double,accelPx:Double):SignalResult{
         if(w<240||h<360||tr==null) return wait("LOW_VISIBILITY")
         if(tr.tipGapFrac>0.25) return wait("NO_CURRENT_TIP")
         val tq=tr.quality
-        // The ROI, colour test, blob/line removal and continuity selection now live in TraceExtractor.
-        val raw=ArrayList<Double>(tr.ys.size); for(yv in tr.ys)raw+=-yv
+        // Crop at the last real column. The fixed-width trace pads past the tip, and that flat
+        // padding used to become the micro window (its slope and chop were exactly zero).
+        val tip=tr.real.indexOfLast{it}
+        if(tip<71) return wait("NO_CURRENT_TIP")
+        val raw=ArrayList<Double>(tip+1); for(i in 0..tip) raw+=-tr.ys[i]
         val coverage=tr.realFrac
         if(raw.size<72 || coverage<.30) return wait("LOW_VISIBILITY")
         val all=smooth(raw,2);val n=all.size

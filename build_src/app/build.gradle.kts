@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.livesignalassistant.forensic7202"
         minSdk = 26
         targetSdk = 35
-        versionCode = 50
-        versionName = "72.0.3-REPAIR"
+        versionCode = 51
+        versionName = "72.0.4-VISION-REPAIR"
     }
 
     signingConfigs {
@@ -38,6 +38,15 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            it.systemProperty("lsa.replay.dev", System.getenv("LSA_REPLAY_DEV") ?: "")
+            it.systemProperty("lsa.replay.holdout", System.getenv("LSA_REPLAY_HOLDOUT") ?: "")
+            it.systemProperty("lsa.replay.root", System.getenv("LSA_REPLAY_ROOT") ?: "")
+        }
+    }
 }
 
 dependencies {
@@ -45,4 +54,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.10.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

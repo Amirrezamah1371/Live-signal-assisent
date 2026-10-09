@@ -86,13 +86,19 @@ object CycleDecider {
         val rh = ce.regHistory(tNowSec, 20.0)
         common["reg_ok_20s"] = rh[0]; common["reg_fail_20s"] = rh[1]; common["reg_gap_20s"] = rh[2]; common["reg_hold_20s"] = rh[3]
 
+        fun slopeDiag(fe: ChangeFeatures, recent: String) = mapOf(
+            "final_recent_side" to recent,
+            "final_state" to fe.state,
+            "features_valid" to fe.valid,
+            "slope_3s" to fe.z3, "slope_6s" to fe.z6, "slope_10s" to fe.z10, "slope_20s" to fe.z20,
+            "window_agreement" to fe.agreement
+        )
         fun wait(reason: String, extra: Map<String, Any?> = emptyMap()) = SignalResult(
             "WAIT", 60, -1, reason = reason, diagnostics = common + extra
         )
 
         if (staleMs > 4000L) return wait("STALE_OBSERVATIONS", mapOf("stale_ms" to staleMs))
         if (n < 45) return wait("INSUFFICIENT_OBSERVATIONS")
-        if (dirN < 4) return wait("FEW_DIRECTIONAL")
 
         // ---------- recent-change arbitration ----------
         val baseSign = if (baseSide == "UP") 1 else if (baseSide == "DOWN") -1 else 0
@@ -110,19 +116,35 @@ object CycleDecider {
                     if (f2.valid && f2.state == "CONTINUING") { side = cand; recentLed = true }
                 }
             }
-            if (side == 0) return wait("CYCLE_INCOHERENT", mapOf("final_recent_side" to recentSide))
+            if (side == 0) return wait("CYCLE_INCOHERENT", slopeDiag(feBase, recentSide))
         } else if (feBase.valid && feBase.state == "REGIME_CHANGE") {
             side = -baseSign; corrected = true
         } else if (cons < 0.60) {
-            return wait("CYCLE_INCOHERENT", mapOf("final_recent_side" to recentSide))
+            return wait("CYCLE_INCOHERENT", slopeDiag(feBase, recentSide))
         }
         val sideStr = if (side > 0) "UP" else "DOWN"
         val fe = ce.features(tNowSec, side)
         val state = if (corrected) "REGIME_CHANGE" else if (fe.valid) fe.state else "NO_RECENT"
+        // Cropping the trace at the last real column makes most analyzer frames FILTER, so dirN
+        // often stays under 4 even when the registered path is a clean continuation. The waiver
+        // is the existing recent-led test, not a new cutoff: full-window agreement, a material
+        // 6s and 10s slope, and CONTINUING. Vision, entry safety, and NO_RECENT still apply.
+        val pathConfirmed = fe.valid && abs(fe.agreement) >= 0.999 && abs(fe.z10) >= 1.0 &&
+            abs(fe.z6) >= 0.8 && state == "CONTINUING"
+        if (dirN < 4 && !pathConfirmed) {
+            return wait("FEW_DIRECTIONAL", mapOf(
+                "final_recent_side" to recentSide,
+                "final_state" to state,
+                "features_valid" to fe.valid,
+                "slope_3s" to fe.z3, "slope_6s" to fe.z6, "slope_10s" to fe.z10, "slope_20s" to fe.z20,
+                "window_agreement" to fe.agreement,
+                "path_confirmed" to false
+            ))
+        }
 
         // ---------- aggregates on the chosen side (last 20 s) ----------
         var sw = 0.0; var eSum = 0.0; var cSum = 0.0; var xSum = 0.0; var rSum = 0.0; var rW = 0.0
-        var topReason = "TREND"; var topW = 0.0
+        var topReason = "PATH"; var topW = 0.0
         for (o in last20) {
             val r = o.r
             if (r.reason == "LOW_VISIBILITY") continue
@@ -173,10 +195,37 @@ object CycleDecider {
         val strength = (strength0 + (if (adv.action == "AVOID") 0.0 else adv.strengthDelta)).coerceIn(0.0, 100.0)
         val regTrusted = ce.registrationTrusted(tNowSec)
         // Maturity uses the exhaustion of the side being entered. Refusal frames stay in refuseWeight.
+        val local = ce.localMotion()
+        val disagree = fe.valid && TraceGeometry.channelsDisagree(fe.z3, local)
+        val legBar = max(4.0 * local.step, 4.0)
+        // Same material-leg bar the channel check uses. A counter-tick under it is not a refusal.
+        val materialBar = max(4.0 * local.step, 0.15 * local.swing)
+        val retraceAgainst = if (!local.usable) 0.0 else if (side > 0) local.retraceHigh else local.retraceLow
+        val legAgainst = local.usable && if (side > 0) local.leg < -legBar else local.leg > legBar
+        val materialLegAgainst = local.usable && abs(local.leg) > materialBar &&
+            ((side > 0 && local.leg < 0.0) || (side < 0 && local.leg > 0.0))
+        var finSup = 0.0
+        var finOpp = 0.0
+        for (o in list) {
+            if (o.tMs < 80000L) continue
+            val r = o.r
+            if (r.direction != "UP" && r.direction != "DOWN") continue
+            val w = tw(o) * ef(r)
+            val sgn = if (r.direction == "UP") 1 else -1
+            if (sgn == side) finSup += w else finOpp += w
+        }
+        val recentOpposes = (recentSide == "UP" && sideStr == "DOWN") || (recentSide == "DOWN" && sideStr == "UP")
+        val inFrameOpposes = local.usable && abs(local.net) > legBar &&
+            ((side > 0 && local.net < 0.0) || (side < 0 && local.net > 0.0))
+        val votesOppose = finOpp > 0.0 && finOpp >= finSup * 1.15
+        // A confirmed regime flip already followed the recent path. A continuation that the
+        // recent path and either the frame or the final window reject is a stale base side.
+        val staleDirection = fe.valid && !corrected && recentOpposes && (inFrameOpposes || votesOppose)
         val safety = if (fe.valid) EntrySafety.block(
             fe.agreement, state, exhaustion, fe.impulseZ, fe.velocityRatio,
             fe.sincePeakSec, fe.counter, refuseW, directW,
-            side * fe.z3, side * fe.z6, side * fe.z10
+            side * fe.z3, side * fe.z6, side * fe.z10,
+            retraceAgainst, legAgainst, materialLegAgainst
         ) else ""
 
         val out = HashMap<String, Any?>(common)
@@ -210,9 +259,24 @@ object CycleDecider {
         out["direct_weight"] = directW
         out["safety_exhaustion"] = exhaustion
         out["strength_is_probability"] = false
+        out["vision_reliability"] = when {
+            disagree || !local.usable -> 0.0
+            fe.valid -> 1.0
+            else -> 0.0
+        }
+        out["direction_confidence"] = strength0
+        out["channel_disagree"] = disagree
+        out["local_net"] = local.net
+        out["local_retrace_against"] = retraceAgainst
+        out["local_leg"] = local.leg
+        out["stale_direction"] = staleDirection
+        out["scale_a"] = ce.debugState()["scale_a"]
+        out["path_confirmed"] = pathConfirmed
 
         val reasonWait = DecisionGate.block(
-            fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety
+            fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety,
+            visionReliable = fe.valid && local.usable && !disagree,
+            staleDirection = staleDirection
         )
         if (reasonWait.isNotEmpty())
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), reasonWait, diagnostics = out)
@@ -234,13 +298,17 @@ object DecisionGate {
         entryQ: Double,
         strength: Double,
         experienceAction: String,
-        safety: String = ""
+        safety: String = "",
+        visionReliable: Boolean = true,
+        staleDirection: Boolean = false
     ): String = when {
         !recentValid -> "NO_RECENT_EVIDENCE"
+        !visionReliable -> "VISION_UNRELIABLE"
         !regTrusted -> "REGISTRATION_UNSTABLE"
         state == "EXHAUSTION" -> "EXHAUSTION"
         state == "NOISE" -> "NOISE"
         safety.isNotEmpty() -> safety
+        staleDirection -> "STALE_DIRECTION"
         lateShare >= 0.5 -> "LATE_WINDOW"
         experienceAction == "AVOID" -> "EXPERIENCE_AVOID"
         entryQ < 32.0 -> "POOR_ENTRY"
@@ -267,7 +335,10 @@ object EntrySafety {
         directWeight: Double,
         signedZ3: Double = Double.NaN,
         signedZ6: Double = Double.NaN,
-        signedZ10: Double = Double.NaN
+        signedZ10: Double = Double.NaN,
+        retraceAgainst: Double = 0.0,
+        legAgainst: Boolean = false,
+        materialLegAgainst: Boolean = false
     ): String {
         // 0.50 is the existing pullback bar (side * slope), not a fitted trade threshold.
         // Two of the three recent windows must clear it before the side is called opposed.
@@ -280,6 +351,12 @@ object EntrySafety {
         }
         // The 6s window still opposes. That is not evidence the pullback has resumed.
         if (state == "PULLBACK") return "PULLBACK_UNRESOLVED"
+        // The raw tip leg is an independent channel. It can oppose the side when the registered
+        // 3-second slope is too weak to count as AGAINST_RECENT and the swing has not retraced halfway.
+        if (materialLegAgainst) return "RAW_LEG_OPPOSES"
+        // Half of the visible swing given back, and the latest leg already going the other way.
+        // Sitting on the extreme itself has retrace 0 and is not this case.
+        if (retraceAgainst >= 0.5 && legAgainst) return "FAILED_EXTREME"
         val atExtreme = sincePeakSec <= 3 && counter < 0.5
         // 0.62 is the analyzer late-entry bar. 1.5 is the existing impulse bar.
         // Velocity under 0.80 means the current 3s speed is no longer at the peak of this window.
