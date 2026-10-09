@@ -72,7 +72,14 @@ object TraceGeometry {
         while (guard++ < 4) {
             when (val edge = rightEdge(path, real)) {
                 is RightEdge.Connected -> return true
-                is RightEdge.Island -> for (i in edge.from..edge.to) real[i] = false
+                is RightEdge.Island -> {
+                    for (i in edge.from..edge.to) real[i] = false
+                    // The short run that was sitting behind that fragment is now the right edge.
+                    // Judge it with the same speck rule. Leaving it for a later pass makes the
+                    // analyzer tip and the registered tip different objects.
+                    stripDetached(real)
+                    if (real.none { it }) return false
+                }
                 is RightEdge.Ambiguous -> return false
             }
         }

@@ -103,6 +103,44 @@ class ConnectedTipTest {
     }
 
     @Test
+    fun shortRunHiddenBehindALongerFragmentIsNotTheTip() {
+        val n = 397
+        val path = DoubleArray(n)
+        val real = BooleanArray(n)
+        for (i in 40..305) {
+            real[i] = true
+            path[i] = 1000.0 + ((i - 40) % 3) * 6.0
+        }
+        val bodyTip = path[305]
+        // Five identical columns, past a gap wide enough for the speck rule, close enough
+        // vertically that the reconnect budget would keep them if they were judged alone.
+        for (i in 335..339) {
+            real[i] = true
+            path[i] = bodyTip - 33.0
+        }
+        // A longer fragment farther right hides that stub from the first speck pass.
+        for (i in 380..393) {
+            real[i] = true
+            path[i] = bodyTip + 700.0
+        }
+        val once = real.copyOf()
+        assertTrue(TraceGeometry.adoptConnectedTip(path, once))
+        assertEquals(305, lastReal(once))
+        assertFalse(once[335])
+        assertFalse(once[380])
+        val twice = once.copyOf()
+        assertTrue(TraceGeometry.adoptConnectedTip(path, twice))
+        assertTrue(twice.contentEquals(once))
+        val ce = ChangeEngine()
+        ce.update(0.0, path, real.copyOf())
+        val info = ce.update(1.0, path, real.copyOf())
+        assertEquals("OK", info["reg_status"])
+        val ref = (info["ref_v"] as Number).toDouble()
+        val tail = doubleArrayOf(path[303], path[304], path[305]).sorted()[1]
+        assertEquals(tail, ref, 1e-6)
+    }
+
+    @Test
     fun ambiguousDisconnectedGeometryFailsClosed() {
         val n = 240
         val path = DoubleArray(n)
