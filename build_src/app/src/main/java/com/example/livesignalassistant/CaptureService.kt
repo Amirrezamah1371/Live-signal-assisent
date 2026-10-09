@@ -23,14 +23,14 @@ class CaptureService:Service(){
  private var projection:MediaProjection?=null;private var reader:ImageReader?=null;private var display:VirtualDisplay?=null
  private var wm:WindowManager?=null;private var brain:TextView?=null;private val bubbles=mutableListOf<View>();private val main=Handler(Looper.getMainLooper());private val worker=Executors.newSingleThreadExecutor();private val evidenceWorker=Executors.newSingleThreadExecutor();private val busy=AtomicBoolean(false)
  private lateinit var memory:MemoryStore;private lateinit var experience:ExperienceStore;private lateinit var pending:PendingTradeStore;private var lastFrameAt=0L;private var lastEvidenceAt=0L;private var cycleStart=SystemClock.elapsedRealtime();private var nextDecisionAt=cycleStart+90000L;private var nextObservationAt=cycleStart+1000L;private val observations=mutableListOf<Obs>();private var cycle=1;private val change=ChangeEngine();private val opportunity=OpportunityCycle();private var lastObsAt=0L
- override fun onCreate(){super.onCreate();opportunity.start(cycleStart);memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("72.0.5 · Wave").setContentText("observing · 90s maximum · 1m expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
+ override fun onCreate(){super.onCreate();opportunity.start(cycleStart);memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("${BuildConfig.CHART_TIMEFRAME} · T+60").setContentText("observing · 90s maximum · 60s expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
   if(i?.action==ACTION_EXPORT){val p=memory.exportZip();Toast.makeText(this,"Memory exported: $p",Toast.LENGTH_LONG).show();return START_NOT_STICKY}
   if(!Settings.canDrawOverlays(this)){stopSelf();return START_NOT_STICKY};showBrain();val code=i?.getIntExtra(EXTRA_RESULT_CODE,Activity.RESULT_CANCELED)?:Activity.RESULT_CANCELED;val data:Intent?=if(Build.VERSION.SDK_INT>=33)i?.getParcelableExtra(EXTRA_RESULT_DATA,Intent::class.java) else @Suppress("DEPRECATION") i?.getParcelableExtra(EXTRA_RESULT_DATA)
   if(code!=Activity.RESULT_OK||data==null){stopSelf();return START_NOT_STICKY};if(projection!=null)return START_NOT_STICKY;val mgr=getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager;projection=mgr.getMediaProjection(code,data);projection?.registerCallback(object:MediaProjection.Callback(){override fun onStop(){stopSelf()}},main);startCapture();return START_NOT_STICKY
  }
  private fun glass(stroke:Int=0x55FFFFFF)=GradientDrawable().apply{setColor(0xB8FFFFFF.toInt());cornerRadius=42f;setStroke(2,stroke)}
- private fun showBrain(){main.post{if(brain!=null)return@post;wm=getSystemService(WINDOW_SERVICE) as WindowManager;val v=TextView(this).apply{text="72.0.5 · DIAG\ncycle 1";textSize=13f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(18,12,18,12);background=glass();elevation=16f};val lp=params(Gravity.TOP or Gravity.END,18,190);wm!!.addView(v,lp);brain=v}}
+ private fun showBrain(){main.post{if(brain!=null)return@post;wm=getSystemService(WINDOW_SERVICE) as WindowManager;val v=TextView(this).apply{text="${BuildConfig.CHART_TIMEFRAME} · T+60\ncycle 1";textSize=13f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(18,12,18,12);background=glass();elevation=16f};val lp=params(Gravity.TOP or Gravity.END,18,190);wm!!.addView(v,lp);brain=v}}
  private fun params(g:Int,x:Int,y:Int)=WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,if(Build.VERSION.SDK_INT>=26)WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT).apply{gravity=g;this.x=x;this.y=y}
  private fun startCapture(){val m=resources.displayMetrics;reader=ImageReader.newInstance(m.widthPixels,m.heightPixels,PixelFormat.RGBA_8888,2);display=projection?.createVirtualDisplay("LSA70",m.widthPixels,m.heightPixels,m.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,reader!!.surface,null,main);reader?.setOnImageAvailableListener({r->val now=SystemClock.elapsedRealtime();val im=r.acquireLatestImage()?:return@setOnImageAvailableListener;if(now-lastFrameAt<250||busy.get()){im.close();return@setOnImageAvailableListener};lastFrameAt=now;busy.set(true);try{val p=im.planes[0];val pad=p.rowStride-p.pixelStride*im.width;val tmp=Bitmap.createBitmap(im.width+pad/p.pixelStride,im.height,Bitmap.Config.ARGB_8888);tmp.copyPixelsFromBuffer(p.buffer);val b=Bitmap.createBitmap(tmp,0,0,im.width,im.height);tmp.recycle();worker.execute{try{processFrame(b,now)}finally{b.recycle();busy.set(false)}}}catch(_:Throwable){busy.set(false)}finally{im.close()}},main)}
  private fun recordFrameAsync(b:Bitmap,tag:String){
@@ -57,11 +57,12 @@ class CaptureService:Service(){
    val r=SignalAnalyzer.analyze(b,tr,vel,acc);synchronized(observations){observations+=Obs(elapsed,r)};lastObsAt=now
    val publish=opportunity.consider(r,change,tSec,experience)
    if(publish!=null)main.post{spawn(publish.copy(expirySeconds=60))}
-   memory.event("BOT_OBSERVATION",mapOf("cycle" to cycle,"cycle_elapsed_ms" to elapsed,"phase" to if(elapsed<80000L)"DEEP_OBSERVATION" else "FINAL_WINDOW","direction" to r.direction,"expiry_s" to r.expirySeconds,"raw_confidence" to r.confidence,"entry" to r.entryQuality,"conflict" to r.conflict,"reason" to r.reason,"up" to r.upScore,"down" to r.downScore,"side" to r.side,"kin_valid" to kinValid,"diagnostics" to (r.diagnostics+regInfo+traceLog(tr,b)+(if(publish==null)emptyMap() else mapOf("opportunity_published" to publish.direction,"opportunity_reason" to publish.reason)))))
+   val waveNow=change.wave(tSec)
+   memory.event("BOT_OBSERVATION",mapOf("cycle" to cycle,"cycle_elapsed_ms" to elapsed,"phase" to if(elapsed<80000L)"DEEP_OBSERVATION" else "FINAL_WINDOW","direction" to r.direction,"expiry_s" to r.expirySeconds,"raw_confidence" to r.confidence,"entry" to r.entryQuality,"conflict" to r.conflict,"reason" to r.reason,"up" to r.upScore,"down" to r.downScore,"side" to r.side,"kin_valid" to kinValid,"velocity" to vel,"acceleration" to acc,"ref_v" to change.debugState()["last"],"dominant_wave" to waveNow.sideName(),"wave_phase" to waveNow.phase,"wave_retrace" to waveNow.retrace,"wave_shock" to waveNow.shock,"wave_broken" to waveNow.broken,"slope_3s" to waveNow.z3,"slope_6s" to waveNow.z6,"slope_10s" to waveNow.z10,"slope_20s" to waveNow.z20,"market_structure" to EntryPermission.structureName(waveNow),"diagnostics" to (r.diagnostics+regInfo+traceLog(tr,b)+(if(publish==null)emptyMap() else mapOf("opportunity_published" to publish.direction,"opportunity_reason" to publish.reason)))))
    do{nextObservationAt+=1000L}while(nextObservationAt<=now)
   }
   val left=max(0,((nextDecisionAt-now+999)/1000).toInt())
-   main.post{brain?.text="72.0.5 · 90S MAX · ${left}s\ncycle $cycle"}
+   main.post{brain?.text="${BuildConfig.CHART_TIMEFRAME} · 90S MAX · ${left}s\ncycle $cycle"}
   if(now>=nextDecisionAt){
    val alreadyPublished=opportunity.onMaximumWindow(nextDecisionAt)
    finishCycle(b,nextDecisionAt,alreadyPublished)
@@ -127,8 +128,44 @@ class CaptureService:Service(){
   memory.event("SIGNAL_PUBLISHED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"confidence_state" to "STRENGTH_NOT_PROBABILITY","model_score" to r.signalQuality,"auto_expire_s" to 15,"publish_mono_ms" to SystemClock.elapsedRealtime(),"diagnostics" to r.diagnostics));val publishedMono=SystemClock.elapsedRealtime();var locked=false
   val expire=Runnable{if(!locked){opportunity.onBubbleTimeout();memory.event("SIGNAL_NOT_EXECUTED_TIMEOUT",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"model_score" to r.signalQuality,"visible_for_s" to 15));try{manager.removeView(v)}catch(_:Throwable){};bubbles.remove(v);restack()}}
   main.postDelayed(expire,15000L)
-  v.setOnClickListener{if(locked)return@setOnClickListener;locked=true;main.removeCallbacks(expire);val startedNs=SystemClock.elapsedRealtimeNanos();val targetNs=startedNs+60_000_000_000L;val ctxState=(r.diagnostics["ctx_state"] as? String)?:"NO_RECENT";val ctxRegime=(r.diagnostics["ctx_regime"] as? String)?:"MIXED";val ctxBand=(r.diagnostics["ctx_band"] as? String)?:"E_MID";pending.upsert(PendingTradeStore.Pending(signalId,r.direction,ctxState,ctxRegime,ctxBand,r.signalQuality,auditFields(r)));memory.event("TRADE_USER_OPENED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to 60,"entry_mono_ns" to startedNs,"target_mono_ns" to targetNs,"model_score" to r.signalQuality,"signal_age_ms" to (SystemClock.elapsedRealtime()-publishedMono)));resetObservationForNewCycle(SystemClock.elapsedRealtime());fun tick(){val nowNs=SystemClock.elapsedRealtimeNanos();val remainNs=(targetNs-nowNs).coerceAtLeast(0L);if(remainNs>0){val cs=(remainNs/10_000_000L);val sec=cs/100;val hundredths=cs%100;v.text="$arrow ${r.direction} · $percentText\nLOCKED · ${sec}.${hundredths.toString().padStart(2,'0')}s";main.postDelayed({tick()},10)}else{memory.event("EXPIRY_CLOCK",mapOf("signal_id" to signalId,"target_mono_ns" to targetNs,"actual_mono_ns" to nowNs,"timer_error_ns" to (nowNs-targetNs).coerceAtLeast(0L)));showResultButtons(v,r.copy(expirySeconds=60),signalId)}};tick()}
+  v.setOnClickListener{
+   if(locked)return@setOnClickListener
+   val sign=if(r.direction=="UP")1 else if(r.direction=="DOWN")-1 else 0
+   val read=currentEntryRead(sign)
+   val block=EntryPermission.atEntry(read)
+   if(block.isNotEmpty()){
+    opportunity.onBubbleTimeout()
+    main.removeCallbacks(expire)
+    memory.event("ENTRY_INVALIDATED",entrySnapshot(signalId,r,publishedMono,block,read))
+    Toast.makeText(this,block,Toast.LENGTH_LONG).show()
+    try{manager.removeView(v)}catch(_:Throwable){}
+    bubbles.remove(v);restack()
+    return@setOnClickListener
+   }
+   locked=true;main.removeCallbacks(expire);val startedNs=SystemClock.elapsedRealtimeNanos();val targetNs=startedNs+60_000_000_000L;val entryRef=change.debugState()["last"];val ctxState=(r.diagnostics["ctx_state"] as? String)?:"NO_RECENT";val ctxRegime=(r.diagnostics["ctx_regime"] as? String)?:"MIXED";val ctxBand=(r.diagnostics["ctx_band"] as? String)?:"E_MID";pending.upsert(PendingTradeStore.Pending(signalId,r.direction,ctxState,ctxRegime,ctxBand,r.signalQuality,auditFields(r)));memory.event("TRADE_USER_OPENED",entrySnapshot(signalId,r,publishedMono,EntryPermission.permissionName(sign),read)+mapOf("expiry_s" to 60,"entry_mono_ns" to startedNs,"target_mono_ns" to targetNs,"entry_ref" to entryRef));resetObservationForNewCycle(SystemClock.elapsedRealtime());fun tick(){val nowNs=SystemClock.elapsedRealtimeNanos();val remainNs=(targetNs-nowNs).coerceAtLeast(0L);if(remainNs>0){val cs=(remainNs/10_000_000L);val sec=cs/100;val hundredths=cs%100;v.text="$arrow ${r.direction} · $percentText\nLOCKED · ${sec}.${hundredths.toString().padStart(2,'0')}s";main.postDelayed({tick()},10)}else{val expiryRef=change.debugState()["last"];memory.event("EXPIRY_CLOCK",mapOf("signal_id" to signalId,"target_mono_ns" to targetNs,"actual_mono_ns" to nowNs,"timer_error_ns" to (nowNs-targetNs).coerceAtLeast(0L),"entry_ref" to entryRef,"expiry_ref" to expiryRef,"prediction_horizon_s" to 60));showResultButtons(v,r.copy(expirySeconds=60),signalId)}};tick()}
  }
+ private fun currentEntryRead(sign:Int):EntryPermission.Read{
+  val tSec=SystemClock.elapsedRealtime()/1000.0
+  val wave=change.wave(tSec)
+  val seriesOk=change.seriesStatus(tSec).reason=="OK"
+  val fe=change.features(tSec,if(sign==0)1 else sign)
+  val latest=synchronized(observations){observations.lastOrNull()?.r}
+  val rp=(latest?.diagnostics?.get("range_position") as? Number)?.toDouble()
+  val exh=(latest?.diagnostics?.get("exhaustion") as? Number)?.toDouble()?:0.0
+  return EntryPermission.Read(sign,wave,seriesOk,fe.velocity,fe.acceleration,fe.stepScale,rp,exh)
+ }
+ private fun entrySnapshot(signalId:String,r:SignalResult,publishedMono:Long,state:String,read:EntryPermission.Read):Map<String,Any?> = mapOf(
+  "signal_id" to signalId,"direction" to r.direction,"model_score" to r.signalQuality,
+  "signal_age_ms" to (SystemClock.elapsedRealtime()-publishedMono),
+  "entry_state" to state,"entry_permission" to if(state.startsWith("VALID"))"OPEN" else "CLOSED",
+  "reason" to state,"market_structure" to EntryPermission.structureName(read.wave),
+  "dominant_wave" to read.wave.sideName(),"wave_phase" to read.wave.phase,"wave_retrace" to read.wave.retrace,
+  "wave_broken" to read.wave.broken,"wave_shock" to read.wave.shock,
+  "slope_3s" to read.wave.z3,"slope_6s" to read.wave.z6,"slope_10s" to read.wave.z10,"slope_20s" to read.wave.z20,
+  "velocity" to read.velocity,"acceleration" to read.acceleration,"step_scale" to read.stepScale,
+  "range_position" to read.rangePosition,"exhaustion" to read.exhaustion,"series_ok" to read.seriesOk,
+  "ref_v" to change.debugState()["last"]
+ )
  private fun showResultButtons(old:TextView,r:SignalResult,signalId:String){val manager=wm?:return;val lp=old.layoutParams as WindowManager.LayoutParams;try{manager.removeView(old)}catch(_:Throwable){};bubbles.remove(old);val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;background=glass();setPadding(8,6,8,6)};fun btn(t:String){row.addView(Button(this).apply{text=t;textSize=10f;setOnClickListener{
    memory.event("TRADE_RESULT",mapOf("signal_id" to signalId,"result" to t,"direction" to r.direction,"expiry_s" to r.expirySeconds,"model_score" to r.signalQuality,"diagnostics" to r.diagnostics))
    val ctxState=(r.diagnostics["ctx_state"] as? String)?:"NO_RECENT"

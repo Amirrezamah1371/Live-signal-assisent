@@ -8,11 +8,27 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.livesignalassistant.forensic7202"
         minSdk = 26
         targetSdk = 35
-        versionCode = 52
-        versionName = "72.0.5-STRUCTURAL-WAVE-REPAIR"
+        versionCode = 53
+    }
+
+    flavorDimensions += "chart"
+    productFlavors {
+        create("t60m1") {
+            dimension = "chart"
+            applicationId = "com.example.livesignalassistant.t601m"
+            versionName = "72.1.0-T60-1M"
+            buildConfigField("String", "CHART_TIMEFRAME", "\"1M\"")
+            resValue("string", "app_name", "Live Signal Assistant — 1M")
+        }
+        create("t60m5") {
+            dimension = "chart"
+            applicationId = "com.example.livesignalassistant.t605m"
+            versionName = "72.1.0-T60-5M"
+            buildConfigField("String", "CHART_TIMEFRAME", "\"5M\"")
+            resValue("string", "app_name", "Live Signal Assistant — 5M")
+        }
     }
 
     signingConfigs {

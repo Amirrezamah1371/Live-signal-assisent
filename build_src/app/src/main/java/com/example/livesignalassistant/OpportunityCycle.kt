@@ -16,7 +16,8 @@ object OpportunityDecider {
         frame: SignalResult,
         ce: ChangeEngine,
         tNowSec: Double,
-        experience: ExperienceSource
+        experience: ExperienceSource,
+        applyEntryGate: Boolean = true
     ): SignalResult {
         val measured = (frame.diagnostics["measured_direction"] as? String)
             ?: if (frame.direction == "UP" || frame.direction == "DOWN") frame.direction else "WAIT"
@@ -83,7 +84,7 @@ object OpportunityDecider {
         val legAgainst = if (sign > 0) local.leg < -legBar else local.leg > legBar
         val materialLegAgainst = abs(local.leg) > materialBar &&
             ((sign > 0 && local.leg < 0.0) || (sign < 0 && local.leg > 0.0))
-        val exhaustion = (frame.diagnostics["exhaustion"] as? Double) ?: 0.0
+        val exhaustion = (frame.diagnostics["exhaustion"] as? Number)?.toDouble() ?: 0.0
         val safety = EntrySafety.block(
             fe.agreement, fe.state, exhaustion, fe.impulseZ, fe.velocityRatio,
             fe.sincePeakSec, fe.counter, 0.0, 1.0,
@@ -91,6 +92,28 @@ object OpportunityDecider {
             retraceAgainst, legAgainst, materialLegAgainst
         )
         if (safety.isNotEmpty()) return hold(safety)
+        if (applyEntryGate) {
+            val rangePosition = (frame.diagnostics["range_position"] as? Number)?.toDouble()
+            val entryBlock = EntryPermission.publication(
+                sign, wave, fe.velocity, fe.acceleration, fe.stepScale, rangePosition, exhaustion
+            )
+            if (entryBlock.isNotEmpty()) {
+                return SignalResult(
+                    "WAIT", 60, frame.confidence, frame.entryQuality, frame.conflict, entryBlock,
+                    diagnostics = frame.diagnostics + waveFields(wave) + mapOf(
+                        "measured_direction" to measured,
+                        "entry_permission" to "CLOSED",
+                        "entry_state" to entryBlock,
+                        "opportunity" to "FRESH",
+                        "velocity" to fe.velocity,
+                        "acceleration" to fe.acceleration,
+                        "step_scale" to fe.stepScale
+                    ),
+                    side = sign,
+                    traceQuality = frame.traceQuality
+                )
+            }
+        }
         val trend = (frame.diagnostics["trend_regime"] as? Double) ?: 0.5
         val regime = ExperienceStore.regimeBand(trend)
         val band = ExperienceStore.entryBand(frame.entryQuality.toDouble())
@@ -117,12 +140,30 @@ object OpportunityDecider {
                 "wave_phase" to wave.phase,
                 "wave_retrace" to wave.retrace,
                 "wave_broken" to wave.broken,
-                "wave_shock" to wave.shock
+                "wave_shock" to wave.shock,
+                "entry_state" to EntryPermission.permissionName(sign),
+                "market_structure" to EntryPermission.structureName(wave),
+                "velocity" to fe.velocity,
+                "acceleration" to fe.acceleration,
+                "step_scale" to fe.stepScale
             ),
             side = sign,
             traceQuality = frame.traceQuality
         )
     }
+
+    private fun waveFields(wave: WaveRead): Map<String, Any?> = mapOf(
+        "dominant_wave" to wave.sideName(),
+        "wave_phase" to wave.phase,
+        "wave_retrace" to wave.retrace,
+        "wave_broken" to wave.broken,
+        "wave_shock" to wave.shock,
+        "slope_3s" to wave.z3,
+        "slope_6s" to wave.z6,
+        "slope_10s" to wave.z10,
+        "slope_20s" to wave.z20,
+        "market_structure" to EntryPermission.structureName(wave)
+    )
 }
 
 /**
@@ -154,10 +195,11 @@ class OpportunityCycle {
         frame: SignalResult,
         ce: ChangeEngine,
         tNowSec: Double,
-        experience: ExperienceSource
+        experience: ExperienceSource,
+        applyEntryGate: Boolean = true
     ): SignalResult? {
         if (bubbleOpen) return null
-        val opp = OpportunityDecider.evaluate(frame, ce, tNowSec, experience)
+        val opp = OpportunityDecider.evaluate(frame, ce, tNowSec, experience, applyEntryGate)
         if (opp.direction != "UP" && opp.direction != "DOWN") return null
         val key = opp.diagnostics["setup_key"] as? String ?: "${opp.direction}|${opp.reason}"
         if (key == publishedKey) return null

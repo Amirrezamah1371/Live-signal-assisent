@@ -27,7 +27,7 @@ object CycleDecider {
 
     fun decide(
         list: List<Obs>, endMs: Long, ce: ChangeEngine, tNowSec: Double,
-        experience: ExperienceSource, staleMs: Long
+        experience: ExperienceSource, staleMs: Long, applyEntryGate: Boolean = true
     ): SignalResult {
         val n = list.size
         fun tw(o: Obs): Double {
@@ -290,8 +290,25 @@ object CycleDecider {
         out["wave_broken"] = wave.broken
         out["wave_shock"] = wave.shock
         val waveBlock = MarketStructure.block(side, wave)
-        if (waveBlock.isNotEmpty())
+        out["market_structure"] = EntryPermission.structureName(wave)
+        out["velocity"] = fe.velocity
+        out["acceleration"] = fe.acceleration
+        if (waveBlock.isNotEmpty()) {
+            out["entry_permission"] = "CLOSED"
+            out["entry_state"] = waveBlock
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), waveBlock, diagnostics = out)
+        }
+        val latestRange = list.asReversed().firstNotNullOfOrNull { num(it.r, "range_position") }
+        val entryBlock = if (applyEntryGate) EntryPermission.publication(
+            side, wave, fe.velocity, fe.acceleration, fe.stepScale, latestRange, exhaustion
+        ) else ""
+        if (entryBlock.isNotEmpty()) {
+            out["entry_permission"] = "CLOSED"
+            out["entry_state"] = entryBlock
+            return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), entryBlock, diagnostics = out)
+        }
+        out["entry_permission"] = "OPEN"
+        out["entry_state"] = EntryPermission.permissionName(side)
 
         val reasonWait = DecisionGate.block(
             fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety,

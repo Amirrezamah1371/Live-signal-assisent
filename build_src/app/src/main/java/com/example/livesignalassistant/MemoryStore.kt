@@ -24,6 +24,8 @@ class MemoryStore(private val ctx: Context) {
     fun event(type:String, data:Map<String,Any?> = emptyMap()) = synchronized(AppStorageLock) {
         val o=JSONObject(); o.put("ts_ms",System.currentTimeMillis());o.put("mono_ms",SystemClock.elapsedRealtime());o.put("type",type)
         data.forEach{(k,v)->o.put(k, JSONObject.wrap(v))}
+        // Labels are measurement tags. The decision engine does not read them.
+        ExperimentTag.sessionFields(BuildConfig.CHART_TIMEFRAME, AccountMode.current(ctx)).forEach { (k, v) -> o.put(k, v) }
         log.appendText(o.toString()+"\n")
     }
     @Synchronized fun frame(b:Bitmap, tag:String="observe"):String {
@@ -55,7 +57,7 @@ class MemoryStore(private val ctx: Context) {
                 else {z.putNextEntry(ZipEntry(base));f.inputStream().use{it.copyTo(z)};z.closeEntry()}
             }
             dir.listFiles()?.forEach{add(it,it.name)}
-            z.putNextEntry(ZipEntry("README.txt")); z.write("Live Signal Assistant 7.0 ONE DECISION + MEMORY\nTimeline timestamps are epoch milliseconds. SCREEN_EVIDENCE files map visual chart evidence to decisions.\n".toByteArray()); z.closeEntry()
+            z.putNextEntry(ZipEntry("README.txt")); z.write(ExperimentTag.readme(BuildConfig.CHART_TIMEFRAME, AccountMode.current(ctx)).toByteArray()); z.closeEntry()
         }
         val values=ContentValues().apply{put(MediaStore.MediaColumns.DISPLAY_NAME,tmp.name);put(MediaStore.MediaColumns.MIME_TYPE,"application/zip");if(Build.VERSION.SDK_INT>=29)put(MediaStore.MediaColumns.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS)}
         val uri=ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values)?:return tmp.absolutePath
