@@ -73,6 +73,17 @@ object SignalAnalyzer {
         if(volExpansion>=2.20 && best.conflict>35)
             return entryRefused("SHOCK_UNRESOLVED", sign, best, up, down, diag, tq)
 
+        // The wider swing still points the other way, and this frame did not break it.
+        // Keep that side as the market state. A micro bounce is a pullback, not a new trend.
+        val frameWa=(best.diagnostics["wa"] as? Double)?:0.0
+        val frameSa=(best.diagnostics["sa"] as? Double)?:0.0
+        val frameRejection=(best.diagnostics["rejection"] as? Double)?:0.0
+        val edgeTurn=best.reason=="TURN" || frameRejection>0.5
+        if(frameWa<=-0.20 && frameSa<=-0.30 && !edgeTurn){
+            val macro=if(sign>0) "DOWN" else "UP"
+            return SignalResult("WAIT",60,best.score.toInt(),best.entry.toInt(),best.conflict.toInt(),"PULLBACK",up,down,0,diag+mapOf("measured_direction" to macro,"entry_permission" to "CLOSED","wave_phase" to "PULLBACK"),side=if(macro=="DOWN") -1 else 1,traceQuality=tq)
+        }
+
         // Balanced gates: selective without turning the robot into permanent WAIT.
         // These are model scores, never advertised as win probabilities.
         if(best.score<64.0 || best.entry<47.0 || best.conflict>57.0 || margin<7.0)
@@ -211,7 +222,15 @@ object SignalAnalyzer {
         val recentMax=m.p.maxOrNull()?:r; val recentMin=m.p.minOrNull()?:r
         val failedUp=(recentMax>res+s.floor*.18 && r<res-s.floor*.05)
         val failedDown=(recentMin<sup-s.floor*.18 && r>sup+s.floor*.05)
-        val rejection=when { sign<0 && failedUp -> 1.0; sign>0 && failedDown -> 1.0; else -> 0.0 }
+        // A probe that is still inside an intact wider swing is a pullback, not a failed break.
+        // sa/wa are already signed for this candidate, so a negative pair means the structure opposes it.
+        val priorIntact = sa < -0.30 && wa < -0.20
+        val rejection=when {
+            priorIntact -> 0.0
+            sign<0 && failedUp -> 1.0
+            sign>0 && failedDown -> 1.0
+            else -> 0.0
+        }
 
         // Shape memory: compare the newest normalized path with the preceding path and its mirror.
         val shape=shapeSimilarity(s.p)
@@ -244,7 +263,9 @@ object SignalAnalyzer {
         }
 
         val score=(38+directional*49+reversal*8+continuation*7+breakout*5+timing*6+entryQ*.09-conflict*.17-exhaustion*7+horizonBonus-lateEntryPenalty+zoneAdjustment+structuralBonus-contextPenalty+regimeAdjustment+horizonFit*7-horizonPenalty).coerceIn(0.0,100.0)
-        val reason=when{rejection>.5->"FAIL_BRK";lowerTurn||upperTurn->"TURN";breakout>.45&&expansionEvidence>.18->"BRK";reversal>.45->"REV";exhaustion>.58->"EXH";trendContext>.32->"TREND";rangeContext>.28->"RANGE";else->"MOM"}
+        // A with-trend wick is not a failed break. FAIL_BRK is only the claim that the other side's edge failed.
+        val withTrend = wa > 0.20 && sa > 0.20
+        val reason=when{rejection>.5 && !withTrend->"FAIL_BRK";lowerTurn||upperTurn->"TURN";breakout>.45&&expansionEvidence>.18->"BRK";reversal>.45->"REV";exhaustion>.58->"EXH";trendContext>.32->"TREND";rangeContext>.28->"RANGE";else->"MOM"}
         return C(sign,e,score,entryQ,conflict,reason,mapOf(
             "wa" to wa,"sa" to sa,"ea" to ea,"ma" to ma,"va" to va,"aa" to aa,
             "support" to sup,"resistance" to res,"range_position" to pos,"wide_position" to widePos,

@@ -283,6 +283,15 @@ object CycleDecider {
         out["final_opposition_weight"] = finOpp
         out["scale_a"] = ce.debugState()["scale_a"]
         out["path_confirmed"] = pathConfirmed
+        val wave = ce.wave(tNowSec)
+        out["dominant_wave"] = wave.sideName()
+        out["wave_phase"] = wave.phase
+        out["wave_retrace"] = wave.retrace
+        out["wave_broken"] = wave.broken
+        out["wave_shock"] = wave.shock
+        val waveBlock = MarketStructure.block(side, wave)
+        if (waveBlock.isNotEmpty())
+            return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), waveBlock, diagnostics = out)
 
         val reasonWait = DecisionGate.block(
             fe.valid, regTrusted, state, lateShare, entryQ, strength, adv.action, safety,
@@ -292,7 +301,8 @@ object CycleDecider {
         )
         if (reasonWait.isNotEmpty())
             return SignalResult("WAIT", 60, -1, entryQ.toInt(), conflict.toInt(), reasonWait, diagnostics = out)
-        val reason = if (corrected) "REGIME_CHANGE" else if (recentLed) "RECENT_LED" else topReason
+        val named = if (corrected) "REGIME_CHANGE" else if (recentLed) "RECENT_LED" else topReason
+        val reason = if (named == "FAIL_BRK" && !wave.broken) "TREND" else named
         return SignalResult(
             sideStr, 60, -1, entryQ.toInt(), conflict.toInt(), reason,
             signalQuality = max(1, strength.toInt()), diagnostics = out

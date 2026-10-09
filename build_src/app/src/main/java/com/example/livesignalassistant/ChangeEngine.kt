@@ -20,6 +20,51 @@ class ChangeFeatures(
 class SeriesStatus(val points: Int, val spanSec: Double, val reason: String)
 
 /**
+ * The local wave, read from the registered series.
+ * A short counter-move stays a pullback until it breaks that wave.
+ * [dominant] is +1 for UP, -1 for DOWN, 0 when no wave is established.
+ */
+class WaveRead(
+    val valid: Boolean,
+    val dominant: Int = 0,
+    val phase: String = "NONE",
+    val retrace: Double = 0.0,
+    val broken: Boolean = false,
+    val shock: Boolean = false,
+    val impulseSign: Int = 0,
+    val z3: Double = 0.0,
+    val z6: Double = 0.0,
+    val z10: Double = 0.0,
+    val z20: Double = 0.0
+) {
+    fun sideName(s: Int = dominant): String = when (s) {
+        1 -> "UP"
+        -1 -> "DOWN"
+        else -> "NONE"
+    }
+}
+
+/**
+ * Publication rule for a proposed side. Empty means the wave does not forbid it.
+ * This is structure, not a timer: a pullback inside the prior swing cannot become the new trend.
+ */
+object MarketStructure {
+    fun block(sign: Int, wave: WaveRead): String {
+        if (!wave.valid || sign == 0) return ""
+        // A shock is not a direction yet, on either side. The first seconds of the impulse
+        // have not shown whether the prior wave failed.
+        if (wave.shock) return "SHOCK_UNRESOLVED"
+        // Opposite side, and the prior swing has not been broken.
+        if (wave.dominant != 0 && sign != wave.dominant && !wave.broken) return "PULLBACK"
+        // The medium windows disagree, or a short impulse never became a 6s/10s or 20s wave.
+        // A flat series is not this case: there is no impulse to mistake for a direction.
+        if (wave.phase == "UNSTABLE") return "STRUCTURE_UNSTABLE"
+        if (wave.dominant == 0 && (abs(wave.z3) >= 0.5 || abs(wave.z6) >= 0.5)) return "STRUCTURE_UNSTABLE"
+        return ""
+    }
+}
+
+/**
  * Cross-frame price series that survives chart auto-scaling.
  *
  * Trusted history and a candidate registration are separate. A frame is accepted into the trusted
@@ -513,5 +558,75 @@ class ChangeEngine {
             true, z3, z6, z10, z20, v3, acc, jerk, counter, sincePeak, decay, flips, agree, velRatio,
             against, impz, er, state, u, ts.size - usableStart(), ts.last() - ts[usableStart()]
         )
+    }
+
+    /**
+     * Established local wave from the registered path.
+     * Slopes are price-up. The correction envelope is half the prior swing, the same
+     * retrace bar entry safety already uses. A move that lives mostly inside the last
+     * three seconds has not become that swing.
+     */
+    @Synchronized
+    fun wave(tNow: Double): WaveRead {
+        val g = grid(tNow) ?: return WaveRead(false)
+        val w = g.size - 1
+        if (w < 12) return WaveRead(false)
+        val fe = features(tNow, 1)
+        if (!fe.valid) return WaveRead(false)
+        val z3 = fe.z3
+        val z6 = fe.z6
+        val z10 = fe.z10
+        val z20 = fe.z20
+        fun sgn(z: Double, bar: Double): Int = when {
+            z >= bar -> 1
+            z <= -bar -> -1
+            else -> 0
+        }
+        val d3 = abs(g[w] - g[w - min(3, w)])
+        val d10 = abs(g[w] - g[w - min(10, w)])
+        val d20 = abs(g[w] - g[w - min(20, w)])
+        // Half of the 10-second displacement sitting inside 3 seconds means the move
+        // has not spread through the medium window. 1.5 is the existing impulse bar.
+        val concentrated = abs(z3) >= 1.5 && d10 > fe.stepScale && d3 > 0.5 * d10
+        val sameWayEstablished = abs(z20) >= 0.5 && sgn(z20, 0.5) == sgn(z3, 0.0) && d20 > 0.0 && d3 <= 0.5 * d20
+        val shock = concentrated && !sameWayEstablished
+        val impulseSign = sgn(z3, 0.0)
+        val span = min(20, w)
+        val from = w - span
+        var hi = from
+        var lo = from
+        for (i in from..w) {
+            if (g[i] >= g[hi]) hi = i
+            if (g[i] <= g[lo]) lo = i
+        }
+        val range = g[hi] - g[lo]
+        val s20 = sgn(z20, 0.5)
+        val s10 = sgn(z10, 0.5)
+        val s6 = sgn(z6, 0.5)
+        val prior = when {
+            s20 != 0 -> s20
+            s10 != 0 && s6 == s10 && !shock -> s10
+            else -> 0
+        }
+        val retrace = if (prior == 0 || range <= fe.stepScale) 0.0 else if (prior > 0) {
+            ((g[hi] - g[w]) / range).coerceIn(0.0, 1.0)
+        } else {
+            ((g[w] - g[lo]) / range).coerceIn(0.0, 1.0)
+        }
+        // The new leg has to show up in both the 6s and 10s windows, and it has to
+        // have given back at least half the prior swing. A 3-second poke does neither.
+        val counterConfirmed = prior != 0 && s10 == -prior && s6 == s10 && abs(z10) >= 0.5
+        val broken = counterConfirmed && retrace >= 0.5 && !shock
+        val dominant = if (broken) -prior else prior
+        val phase = when {
+            shock -> "SHOCK"
+            broken -> "REVERSAL"
+            prior != 0 && impulseSign == -prior && abs(z3) >= 0.5 && retrace < 0.5 -> "PULLBACK"
+            prior != 0 && s10 == -prior && retrace < 0.5 -> "PULLBACK"
+            prior == 0 && s20 != 0 && s10 != 0 && s10 != s20 -> "UNSTABLE"
+            dominant != 0 -> "CONTINUING"
+            else -> "NONE"
+        }
+        return WaveRead(true, dominant, phase, retrace, broken, shock, impulseSign, z3, z6, z10, z20)
     }
 }

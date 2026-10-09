@@ -195,14 +195,14 @@ class VisionMechanismsTest {
                 retraceAgainst = 0.2, legAgainst = true, materialLegAgainst = true
             )
         )
-        // The registered path is still the rise. The last frame gives the high back.
-        // Chasing that old UP is not a publish. Following the new direction, or waiting, both qualify.
+        // The registered path is still the rise. The last frame gives the high back in one step.
+        // That impulse is not yet a new wave, so the chase stays unpublished.
         val chased = ChangeEngine()
         repeat(16) { chased.update(it.toDouble(), ramp(it * 2)) }
         chased.update(16.0, ramp(32, tip = -90.0))
         val waited = CycleDecider.decide(votes("UP"), 90000L, chased, 16.0, none(), 0L)
         assertEquals("WAIT", waited.direction)
-        assertEquals("AGAINST_RECENT", waited.reason)
+        assertEquals("SHOCK_UNRESOLVED", waited.reason)
         val held = feed((0 until 16).map { swing(0.0) })
         val published = CycleDecider.decide(votes("UP"), 90000L, held, 15.0, none(), 0L)
         assertEquals(published.reason, "UP", published.direction)
