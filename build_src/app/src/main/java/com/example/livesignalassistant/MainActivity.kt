@@ -50,9 +50,20 @@ class MainActivity : AppCompatActivity() {
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(36,60,36,36) }
         root.addView(TextView(this).apply {
-            text = "Live Signal Assistant 72.0.5\n\nStructural wave repair · Experience V3\nEV is evidence, not a probability.\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
+            text = "Live Signal Assistant ${BuildConfig.VERSION_NAME}\n\nChart ${BuildConfig.CHART_TIMEFRAME} · fixed T+60\nEV is evidence, not a probability.\nتجربه‌های WIN/LOSS مستقل از حافظه تست نگهداری می‌شوند."
             textSize = 20f
         })
+        val accountButton = Button(this)
+        fun paintAccount() {
+            accountButton.text = "Account label: ${AccountMode.current(this)} (measurement only)"
+        }
+        accountButton.setOnClickListener {
+            val next = AccountMode.cycle(AccountMode.current(this))
+            getSharedPreferences(AccountMode.PREF, MODE_PRIVATE).edit().putString(AccountMode.KEY, next).apply()
+            paintAccount()
+        }
+        paintAccount()
+        root.addView(accountButton)
         root.addView(Button(this).apply {
             text = "۱) اجازه نمایش روی برنامه‌های دیگر"
             setOnClickListener { if (!Settings.canDrawOverlays(this@MainActivity)) startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }

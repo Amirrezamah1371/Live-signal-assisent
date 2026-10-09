@@ -13,6 +13,7 @@ android {
         targetSdk = 35
         versionCode = 52
         versionName = "72.0.5-STRUCTURAL-WAVE-REPAIR"
+        buildConfigField("String", "CHART_TIMEFRAME", "\"1M\"")
     }
 
     signingConfigs {
