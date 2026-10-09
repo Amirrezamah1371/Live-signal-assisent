@@ -22,8 +22,8 @@ class CaptureService:Service(){
  companion object{const val EXTRA_RESULT_CODE="result_code";const val EXTRA_RESULT_DATA="result_data";const val ACTION_EXPORT="lsa.export";private const val CHANNEL="lsa_v70";private const val NID=1700}
  private var projection:MediaProjection?=null;private var reader:ImageReader?=null;private var display:VirtualDisplay?=null
  private var wm:WindowManager?=null;private var brain:TextView?=null;private val bubbles=mutableListOf<View>();private val main=Handler(Looper.getMainLooper());private val worker=Executors.newSingleThreadExecutor();private val evidenceWorker=Executors.newSingleThreadExecutor();private val busy=AtomicBoolean(false)
- private lateinit var memory:MemoryStore;private lateinit var experience:ExperienceStore;private lateinit var pending:PendingTradeStore;private var lastFrameAt=0L;private var lastEvidenceAt=0L;private var cycleStart=SystemClock.elapsedRealtime();private var nextDecisionAt=cycleStart+90000L;private var nextObservationAt=cycleStart+1000L;private val observations=mutableListOf<Obs>();private var cycle=1;private val change=ChangeEngine();private var lastObsAt=0L
- override fun onCreate(){super.onCreate();memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("72.0.4 · Vision").setContentText("80s deep observation · 10s final decision · 1m expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
+ private lateinit var memory:MemoryStore;private lateinit var experience:ExperienceStore;private lateinit var pending:PendingTradeStore;private var lastFrameAt=0L;private var lastEvidenceAt=0L;private var cycleStart=SystemClock.elapsedRealtime();private var nextDecisionAt=cycleStart+90000L;private var nextObservationAt=cycleStart+1000L;private val observations=mutableListOf<Obs>();private var cycle=1;private val change=ChangeEngine();private val opportunity=OpportunityCycle();private var lastObsAt=0L
+ override fun onCreate(){super.onCreate();opportunity.start(cycleStart);memory=MemoryStore(this);experience=ExperienceStore(this);pending=PendingTradeStore(File(filesDir,"permanent_experience"));channel();startForeground(NID,NotificationCompat.Builder(this,CHANNEL).setContentTitle("72.0.4 · Vision").setContentText("observing · 90s maximum · 1m expiry").setSmallIcon(android.R.drawable.ic_menu_view).setOngoing(true).build());memory.event("SESSION_START")}
  override fun onStartCommand(i:Intent?,f:Int,id:Int):Int{
   if(i?.action==ACTION_EXPORT){val p=memory.exportZip();Toast.makeText(this,"Memory exported: $p",Toast.LENGTH_LONG).show();return START_NOT_STICKY}
   if(!Settings.canDrawOverlays(this)){stopSelf();return START_NOT_STICKY};showBrain();val code=i?.getIntExtra(EXTRA_RESULT_CODE,Activity.RESULT_CANCELED)?:Activity.RESULT_CANCELED;val data:Intent?=if(Build.VERSION.SDK_INT>=33)i?.getParcelableExtra(EXTRA_RESULT_DATA,Intent::class.java) else @Suppress("DEPRECATION") i?.getParcelableExtra(EXTRA_RESULT_DATA)
@@ -48,21 +48,23 @@ class CaptureService:Service(){
    val tr=TraceExtractor.extract(b)
    val tSec=now/1000.0
    var regInfo:Map<String,Any?> = emptyMap();var vel=0.0;var acc=0.0;var kinValid=false
-   if(tr!=null && tr.tipGapFrac<=0.25 && tr.realFrac>=0.30 && tr.ys.size>=72){
+   if(tr!=null && tr.tipConnected && tr.tipGapFrac<=0.25 && tr.realFrac>=0.30 && tr.ys.size>=72){
     val path=DoubleArray(tr.ys.size){-tr.ys[it]}
     regInfo=change.update(tSec,path,tr.real)
     val k=change.kinematicsPx(tSec)
     if(k!=null){vel=k.first;acc=k.second;kinValid=true}
    }
    val r=SignalAnalyzer.analyze(b,tr,vel,acc);synchronized(observations){observations+=Obs(elapsed,r)};lastObsAt=now
-   memory.event("BOT_OBSERVATION",mapOf("cycle" to cycle,"cycle_elapsed_ms" to elapsed,"phase" to if(elapsed<80000L)"DEEP_OBSERVATION" else "FINAL_WINDOW","direction" to r.direction,"expiry_s" to r.expirySeconds,"raw_confidence" to r.confidence,"entry" to r.entryQuality,"conflict" to r.conflict,"reason" to r.reason,"up" to r.upScore,"down" to r.downScore,"side" to r.side,"kin_valid" to kinValid,"diagnostics" to (r.diagnostics+regInfo+traceLog(tr,b))))
+   val publish=opportunity.consider(r,change,tSec,experience)
+   if(publish!=null)main.post{spawn(publish.copy(expirySeconds=60))}
+   memory.event("BOT_OBSERVATION",mapOf("cycle" to cycle,"cycle_elapsed_ms" to elapsed,"phase" to if(elapsed<80000L)"DEEP_OBSERVATION" else "FINAL_WINDOW","direction" to r.direction,"expiry_s" to r.expirySeconds,"raw_confidence" to r.confidence,"entry" to r.entryQuality,"conflict" to r.conflict,"reason" to r.reason,"up" to r.upScore,"down" to r.downScore,"side" to r.side,"kin_valid" to kinValid,"diagnostics" to (r.diagnostics+regInfo+traceLog(tr,b)+(if(publish==null)emptyMap() else mapOf("opportunity_published" to publish.direction,"opportunity_reason" to publish.reason)))))
    do{nextObservationAt+=1000L}while(nextObservationAt<=now)
   }
   val left=max(0,((nextDecisionAt-now+999)/1000).toInt())
-   val phase=if(elapsed<80000L)"DEEP OBSERVATION" else "FINAL DECISION"
-   main.post{brain?.text="72.0.4 · 90S · $phase ${left}s\ncycle $cycle"}
+   main.post{brain?.text="72.0.4 · 90S MAX · ${left}s\ncycle $cycle"}
   if(now>=nextDecisionAt){
-   finishCycle(b,nextDecisionAt)
+   val alreadyPublished=opportunity.onMaximumWindow(nextDecisionAt)
+   finishCycle(b,nextDecisionAt,alreadyPublished)
    // Anchor cycles to the monotonic schedule, never to a late frame; this prevents cumulative drift.
    val late=now-nextDecisionAt
     // If Android was paused long enough to miss a boundary, skip stale cycles instead of emitting catch-up signals.
@@ -75,15 +77,26 @@ class CaptureService:Service(){
      memory.event("STALE_CYCLES_SKIPPED",mapOf("count" to skipped,"late_ms" to late))
     }
     nextObservationAt=cycleStart+1000L;cycle++
+   opportunity.start(cycleStart)
    synchronized(observations){observations.clear()}
    SignalAnalyzer.reset()
   }
  }
+ private fun resetObservationForNewCycle(now:Long){
+  opportunity.onUserLocked(now)
+  cycleStart=opportunity.startMs
+  nextDecisionAt=opportunity.resetAtMs
+  nextObservationAt=cycleStart+1000L
+  synchronized(observations){observations.clear()}
+  SignalAnalyzer.reset()
+  cycle++
+  memory.event("OBSERVATION_CYCLE_RESET",mapOf("reason" to "USER_LOCK","cycle" to cycle,"window_end_mono_ms" to nextDecisionAt))
+ }
  private fun traceLog(tr:TraceResult?,b:Bitmap):Map<String,Any?> =
   if(tr==null)mapOf("trace_b64" to "","bmp_w" to b.width,"bmp_h" to b.height)
-  else mapOf("trace_b64" to TraceCodec.encode(tr),"bmp_w" to b.width,"bmp_h" to b.height,"trace_step_px" to tr.stepPx,"trace_roi_top" to tr.roiTop,"trace_tip_gap" to tr.tipGapFrac)
+  else mapOf("trace_b64" to TraceCodec.encode(tr),"bmp_w" to b.width,"bmp_h" to b.height,"trace_step_px" to tr.stepPx,"trace_roi_top" to tr.roiTop,"trace_tip_gap" to tr.tipGapFrac,"trace_tip_connected" to tr.tipConnected)
 
- private fun finishCycle(b:Bitmap,boundaryMono:Long){
+ private fun finishCycle(b:Bitmap,boundaryMono:Long,alreadyPublished:Boolean){
    val list=synchronized(observations){observations.toList()}
    val nowMono=SystemClock.elapsedRealtime()
    val staleMs=if(lastObsAt==0L)Long.MAX_VALUE else nowMono-lastObsAt
@@ -103,7 +116,7 @@ class CaptureService:Service(){
     "persistence_decay" to d["persistence_decay"],"strength" to result.signalQuality,"entry_quality" to result.entryQuality,
     "reason" to result.reason,"diagnostics" to result.diagnostics))
    if(d["experience_action"]!=null&&d["experience_action"]!="NONE")memory.event("EXPERIENCE_EFFECT",mapOf("cycle" to cycle,"action" to d["experience_action"],"delta" to d["experience_delta"],"n_eff" to d["experience_samples"],"posterior" to d["experience_posterior"],"key" to d["experience_key"],"final_direction" to result.direction))
-   main.post{brain?.text=if(result.direction=="WAIT")"WAIT · 90S FINAL\ncycle $cycle" else "${if(result.direction=="UP")"↑" else "↓"} ${result.direction} · 1m\nFINAL";if(result.direction!="WAIT")spawn(result.copy(expirySeconds=60))}
+   main.post{brain?.text=if(result.direction=="WAIT")"WAIT · 90S MAX\ncycle $cycle" else "${if(result.direction=="UP")"↑" else "↓"} ${result.direction} · 1m\nWINDOW";if(!alreadyPublished && result.direction!="WAIT")spawn(result.copy(expirySeconds=60))}
   }
  private fun dp(v:Int)=(v*resources.displayMetrics.density).roundToInt()
  private fun spawn(r:SignalResult){
@@ -112,9 +125,9 @@ class CaptureService:Service(){
   val v=TextView(this).apply{text="$arrow ${r.direction} · ${r.expirySeconds/60}m · $percentText\nOPEN";textSize=11f;setTextColor(Color.BLACK);gravity=Gravity.CENTER;setPadding(dp(8),dp(5),dp(8),dp(5));background=glass();elevation=18f}
   val lp=params(Gravity.TOP or Gravity.START,dp(4),dp(120)+bubbles.size*dp(52));manager.addView(v,lp);bubbles+=v;restack()
   memory.event("SIGNAL_PUBLISHED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"confidence_state" to "STRENGTH_NOT_PROBABILITY","model_score" to r.signalQuality,"auto_expire_s" to 15,"publish_mono_ms" to SystemClock.elapsedRealtime(),"diagnostics" to r.diagnostics));val publishedMono=SystemClock.elapsedRealtime();var locked=false
-  val expire=Runnable{if(!locked){memory.event("SIGNAL_NOT_EXECUTED_TIMEOUT",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"model_score" to r.signalQuality,"visible_for_s" to 15));try{manager.removeView(v)}catch(_:Throwable){};bubbles.remove(v);restack()}}
+  val expire=Runnable{if(!locked){opportunity.onBubbleTimeout();memory.event("SIGNAL_NOT_EXECUTED_TIMEOUT",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to r.expirySeconds,"model_score" to r.signalQuality,"visible_for_s" to 15));try{manager.removeView(v)}catch(_:Throwable){};bubbles.remove(v);restack()}}
   main.postDelayed(expire,15000L)
-  v.setOnClickListener{if(locked)return@setOnClickListener;locked=true;main.removeCallbacks(expire);val startedNs=SystemClock.elapsedRealtimeNanos();val targetNs=startedNs+60_000_000_000L;val ctxState=(r.diagnostics["ctx_state"] as? String)?:"NO_RECENT";val ctxRegime=(r.diagnostics["ctx_regime"] as? String)?:"MIXED";val ctxBand=(r.diagnostics["ctx_band"] as? String)?:"E_MID";pending.upsert(PendingTradeStore.Pending(signalId,r.direction,ctxState,ctxRegime,ctxBand,r.signalQuality,auditFields(r)));memory.event("TRADE_USER_OPENED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to 60,"entry_mono_ns" to startedNs,"target_mono_ns" to targetNs,"model_score" to r.signalQuality,"signal_age_ms" to (SystemClock.elapsedRealtime()-publishedMono)));fun tick(){val nowNs=SystemClock.elapsedRealtimeNanos();val remainNs=(targetNs-nowNs).coerceAtLeast(0L);if(remainNs>0){val cs=(remainNs/10_000_000L);val sec=cs/100;val hundredths=cs%100;v.text="$arrow ${r.direction} · $percentText\nLOCKED · ${sec}.${hundredths.toString().padStart(2,'0')}s";main.postDelayed({tick()},10)}else{memory.event("EXPIRY_CLOCK",mapOf("signal_id" to signalId,"target_mono_ns" to targetNs,"actual_mono_ns" to nowNs,"timer_error_ns" to (nowNs-targetNs).coerceAtLeast(0L)));showResultButtons(v,r.copy(expirySeconds=60),signalId)}};tick()}
+  v.setOnClickListener{if(locked)return@setOnClickListener;locked=true;main.removeCallbacks(expire);val startedNs=SystemClock.elapsedRealtimeNanos();val targetNs=startedNs+60_000_000_000L;val ctxState=(r.diagnostics["ctx_state"] as? String)?:"NO_RECENT";val ctxRegime=(r.diagnostics["ctx_regime"] as? String)?:"MIXED";val ctxBand=(r.diagnostics["ctx_band"] as? String)?:"E_MID";pending.upsert(PendingTradeStore.Pending(signalId,r.direction,ctxState,ctxRegime,ctxBand,r.signalQuality,auditFields(r)));memory.event("TRADE_USER_OPENED",mapOf("signal_id" to signalId,"direction" to r.direction,"expiry_s" to 60,"entry_mono_ns" to startedNs,"target_mono_ns" to targetNs,"model_score" to r.signalQuality,"signal_age_ms" to (SystemClock.elapsedRealtime()-publishedMono)));resetObservationForNewCycle(SystemClock.elapsedRealtime());fun tick(){val nowNs=SystemClock.elapsedRealtimeNanos();val remainNs=(targetNs-nowNs).coerceAtLeast(0L);if(remainNs>0){val cs=(remainNs/10_000_000L);val sec=cs/100;val hundredths=cs%100;v.text="$arrow ${r.direction} · $percentText\nLOCKED · ${sec}.${hundredths.toString().padStart(2,'0')}s";main.postDelayed({tick()},10)}else{memory.event("EXPIRY_CLOCK",mapOf("signal_id" to signalId,"target_mono_ns" to targetNs,"actual_mono_ns" to nowNs,"timer_error_ns" to (nowNs-targetNs).coerceAtLeast(0L)));showResultButtons(v,r.copy(expirySeconds=60),signalId)}};tick()}
  }
  private fun showResultButtons(old:TextView,r:SignalResult,signalId:String){val manager=wm?:return;val lp=old.layoutParams as WindowManager.LayoutParams;try{manager.removeView(old)}catch(_:Throwable){};bubbles.remove(old);val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;background=glass();setPadding(8,6,8,6)};fun btn(t:String){row.addView(Button(this).apply{text=t;textSize=10f;setOnClickListener{
    memory.event("TRADE_RESULT",mapOf("signal_id" to signalId,"result" to t,"direction" to r.direction,"expiry_s" to r.expirySeconds,"model_score" to r.signalQuality,"diagnostics" to r.diagnostics))

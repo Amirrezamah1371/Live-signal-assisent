@@ -17,7 +17,8 @@ class TraceResult(
     val roiBottom: Int,
     val quality: Double,
     val stepPx: Int = 0,
-    val tipGapFrac: Double = 0.0
+    val tipGapFrac: Double = 0.0,
+    val tipConnected: Boolean = true
 )
 
 /**
@@ -289,8 +290,9 @@ object TraceExtractor {
         }
         var maxJump = 0.0
         for (m in 1 until n) if (real[m] && real[m - 1]) maxJump = max(maxJump, abs(ys[m] - ys[m - 1]) / rh)
-        // A detached speck at the right edge is not the price. Drop it before the tip is measured.
-        TraceGeometry.stripDetached(real)
+        // The tip has to sit on the connected price path. A detached right-edge fragment is dropped.
+        // If the right edge cannot be chosen, the frame stays explicit and is not a price tip.
+        val tipConnected = TraceGeometry.adoptConnectedTip(ys, real)
         var hiReal = -1
         var realCount2 = 0
         for (ci in 0 until n) if (real[ci]) {
@@ -302,6 +304,6 @@ object TraceExtractor {
         val tipGapFrac = if (hiReal < 0) 1.0 else (nCols - 1 - hiReal).coerceAtLeast(0).toDouble() / nCols
         val q = (((realFrac - 0.35) / 0.5).coerceIn(0.0, 1.0)) *
             (1.0 - 0.3 * ((maxJump - 0.2) / 0.4).coerceIn(0.0, 1.0))
-        return TraceResult(ys, real, realFrac, ambiguity, maxJump, bar > 0, y0, y1, q, step, tipGapFrac)
+        return TraceResult(ys, real, realFrac, ambiguity, maxJump, bar > 0, y0, y1, q, step, tipGapFrac, tipConnected)
     }
 }

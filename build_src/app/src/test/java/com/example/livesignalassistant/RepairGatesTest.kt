@@ -203,7 +203,7 @@ class RepairGatesTest {
         val ce = feed(20)
         val frames = ArrayList<Obs>()
         repeat(4) { i -> frames += obs(70000L + i * 1000L, "UP", "FAIL_BRK", 1, exhaustion = 0.1) }
-        repeat(55) { i -> frames += obs(10000L + i * 1000L, "WAIT", "LATE_ENTRY_RISK", -1, exhaustion = 0.2) }
+        repeat(55) { i -> frames += obs(72000L + i * 300L, "WAIT", "LATE_ENTRY_RISK", -1, exhaustion = 0.2) }
         val result = CycleDecider.decide(frames, 90000L, ce, 19.0, none(), 0L)
         assertEquals("WAIT", result.direction)
         assertEquals("ENTRY_REFUSED", result.reason)

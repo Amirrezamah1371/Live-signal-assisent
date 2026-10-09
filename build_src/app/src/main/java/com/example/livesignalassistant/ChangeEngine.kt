@@ -235,6 +235,25 @@ class ChangeEngine {
     @Synchronized
     fun update(t: Double, p: DoubleArray, real: BooleanArray? = null): Map<String, Any?> {
         val cleaned = real?.copyOf()
+        if (cleaned != null && !TraceGeometry.adoptConnectedTip(p, cleaned)) {
+            seenPath = p.copyOf(); seenReal = cleaned
+            val vHeld = if (vs.isEmpty()) 0.0 else vs.last()
+            if (prevT < 0.0 || t > prevT) {
+                lastReg = "FAIL"
+                regLog.add(Pair(t, "FAIL"))
+                while (regLog.isNotEmpty() && t - regLog[0].first > 45.0) regLog.removeAt(0)
+            }
+            return mapOf(
+                "reg_status" to "FAIL", "reg_shift" to 0.0, "reg_a" to scaleA, "ref_v" to vHeld, "ref_points" to ts.size,
+                "reg_reason" to "TIP_DISCONNECTED", "reg_score" to -1.0, "reg_best_shift" to -1.0, "reg_a_raw" to 0.0,
+                "reg_a_clamped" to false,
+                "reg_b" to scaleB, "reg_overlap_len" to 0, "reg_resid_rel" to -1.0,
+                "reg_old_n" to (prevP?.size ?: 0), "reg_new_n" to p.size, "reg_t" to t, "reg_prev_t" to prevT,
+                "reg_provisional" to provisional, "reg_fail_streak" to failStreak,
+                "reg_candidate_points" to candTs.size,
+                "scale_a" to scaleA, "scale_b" to scaleB
+            )
+        }
         if (cleaned != null) TraceGeometry.stripDetached(cleaned)
         seenPath = p.copyOf(); seenReal = cleaned
         var reg = "NEW"; var logStatus = "NEW"; var shift = 0.0; var aUsed = 1.0
