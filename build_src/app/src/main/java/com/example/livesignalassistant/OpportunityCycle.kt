@@ -46,8 +46,32 @@ object OpportunityDecider {
         val local = ce.localMotion()
         if (!local.usable || TraceGeometry.channelsDisagree(fe.z3, local)) return hold("VISION_UNRELIABLE")
         if (entryRefused) return hold(frame.reason)
-        // The short registered move and the current frame have to name the same side.
-        if (sign * fe.z3 <= 0.0 || sign * fe.z6 <= 0.0) return hold("CURRENT_DIRECTION_UNSUPPORTED")
+        val wave = ce.wave(tNowSec)
+        val waveBlock = MarketStructure.block(sign, wave)
+        if (waveBlock.isNotEmpty()) {
+            val kept = if (wave.dominant != 0) wave.sideName() else measured
+            return SignalResult(
+                "WAIT", 60, frame.confidence, frame.entryQuality, frame.conflict, waveBlock,
+                diagnostics = frame.diagnostics + mapOf(
+                    "measured_direction" to kept,
+                    "entry_permission" to "CLOSED",
+                    "opportunity" to "FRESH",
+                    "dominant_wave" to wave.sideName(),
+                    "wave_phase" to wave.phase,
+                    "wave_retrace" to wave.retrace,
+                    "wave_broken" to wave.broken,
+                    "wave_shock" to wave.shock,
+                    "slope_3s" to wave.z3,
+                    "slope_6s" to wave.z6,
+                    "slope_10s" to wave.z10,
+                    "slope_20s" to wave.z20
+                ),
+                side = if (kept == "DOWN") -1 else if (kept == "UP") 1 else frame.side,
+                traceQuality = frame.traceQuality
+            )
+        }
+        // 0.50 is the existing pullback bar. A window that does not clear it does not support a side.
+        if (sign * fe.z3 < 0.5 || sign * fe.z6 < 0.5) return hold("CURRENT_DIRECTION_UNSUPPORTED")
         if (fe.state == "EXHAUSTION") return hold("EXHAUSTION")
         if (fe.state == "NOISE") return hold("NOISE")
         // A frame the analyzer did not itself qualify is not promoted here.
@@ -72,9 +96,12 @@ object OpportunityDecider {
         val band = ExperienceStore.entryBand(frame.entryQuality.toDouble())
         val adv = experience.advise(measured, fe.state, regime, band)
         if (adv.action == "AVOID") return hold("EXPERIENCE_AVOID")
-        val key = "$measured|${frame.reason}|${frame.entryQuality / 8}"
+        // FAIL_BRK is a broken prior swing. A continuation of the current wave keeps its side
+        // and is not reported as a failed break.
+        val publishReason = if (frame.reason == "FAIL_BRK" && !wave.broken) "TREND" else frame.reason
+        val key = "$measured|$publishReason|${frame.entryQuality / 8}"
         return SignalResult(
-            measured, 60, frame.confidence, frame.entryQuality, frame.conflict, frame.reason,
+            measured, 60, frame.confidence, frame.entryQuality, frame.conflict, publishReason,
             signalQuality = max(1, frame.confidence),
             diagnostics = frame.diagnostics + mapOf(
                 "measured_direction" to measured,
@@ -85,7 +112,12 @@ object OpportunityDecider {
                 "ctx_regime" to regime,
                 "ctx_band" to band,
                 "reg_trusted" to true,
-                "reg_status" to ce.lastReg
+                "reg_status" to ce.lastReg,
+                "dominant_wave" to wave.sideName(),
+                "wave_phase" to wave.phase,
+                "wave_retrace" to wave.retrace,
+                "wave_broken" to wave.broken,
+                "wave_shock" to wave.shock
             ),
             side = sign,
             traceQuality = frame.traceQuality
